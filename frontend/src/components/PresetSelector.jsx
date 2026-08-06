@@ -1,23 +1,24 @@
 import React from 'react';
-import { CheckCircle2, AlertOctagon, ShieldAlert, Sparkles, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, AlertOctagon, ShieldAlert, Zap, TrendingUp, DollarSign, Repeat, FileMinus } from 'lucide-react';
 
 export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSelectPreset, isLoading }) {
   const invoicePresets = [
     {
       id: 'clean',
-      title: 'Clean Invoice',
-      vendor: 'Apex Cloud Infrastructure Inc',
+      title: 'Clean Supplier Invoice',
+      vendor: 'Apex Cloud Infrastructure',
       amount: '$1,520.00',
       expected: 'APPROVE',
       icon: CheckCircle2,
       color: 'border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/5 text-emerald-400',
       badge: 'Low Risk',
       badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-      description: 'Standard recurring cloud infrastructure billing with verified vendor identity.',
+      description: 'Normal trusted vendor. Normal amount. Known identity. No duplicate.',
+      signals: 'None (Clean)'
     },
     {
       id: 'typosquat',
-      title: 'Typosquat / Fraud Invoice',
+      title: 'Vendor Impersonation / Wire Fraud',
       vendor: 'Acme Corp.',
       amount: '$47,000.00',
       expected: 'REJECT',
@@ -25,75 +26,113 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
       color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
       badge: 'Typosquat & Wire Risk',
       badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-      description: 'Unverified vendor name match + unverified banking detail change request.',
+      description: 'Near-matching vendor identity with suspicious banking-change instructions and large amount.',
+      signals: 'VENDOR_TYPOSQUATTING, BANKING_CHANGE_UNVERIFIED'
     },
     {
       id: 'duplicate',
-      title: 'Duplicate Invoice #',
-      vendor: 'Apex Cloud Infrastructure Inc',
+      title: 'Duplicate Invoice',
+      vendor: 'Apex Cloud Infrastructure',
       amount: '$1,520.00',
       expected: 'REJECT',
-      icon: AlertOctagon,
+      icon: Repeat,
       color: 'border-amber-500/40 hover:border-amber-400 bg-amber-500/5 text-amber-400',
       badge: 'Duplicate Threat',
       badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-      description: 'Re-submitted invoice number matching previously approved ledger item.',
+      description: 'Previously processed invoice submitted again.',
+      signals: 'DUPLICATE_INVOICE_NUMBER'
     },
+    {
+      id: 'behavioral_anomaly',
+      title: 'Behavioral Anomaly',
+      vendor: 'Established Vendor LLC',
+      amount: '$1,470,000.00',
+      expected: 'REJECT',
+      icon: TrendingUp,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'Behavioral Risk',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'New transaction is dramatically above historical baseline and introduces a new bank account.',
+      signals: 'AMOUNT_BEHAVIOR_DEVIATION, NEW_VENDOR_BANK_ACCOUNT'
+    }
   ];
 
   const orderPresets = [
     {
       id: 'clean_order',
-      title: 'Verified Customer Order',
+      title: 'Clean Customer Order',
       vendor: 'Alice Wonderland',
       amount: '$250.00',
-      expected: 'APPROVE',
+      expected: 'RELEASE',
       icon: CheckCircle2,
       color: 'border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/5 text-emerald-400',
       badge: 'Payment Verified',
       badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-      description: 'Customer order amount matches settled transaction in deterministic Payment Ledger.',
+      description: 'Order amount exactly matches settled transaction in ledger.',
+      signals: 'None (Clean)'
     },
     {
       id: 'fake_payment',
-      title: 'Fake Payment Proof',
+      title: 'Fake Payment Claim',
       vendor: 'Bob Builder',
       amount: '$5,000.00',
-      expected: 'REJECT',
+      expected: 'HOLD',
       icon: ShieldAlert,
       color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
-      badge: 'Ledger Mismatch',
+      badge: 'Missing Payment',
       badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
-      description: 'Payment claim is missing from Payment Ledger. Possible screenshot fraud.',
+      description: 'Customer claims payment was completed, but ledger contains no matching transaction.',
+      signals: 'PAYMENT_NOT_FOUND'
     },
+    {
+      id: 'partial_payment',
+      title: 'Partial Payment Attack',
+      vendor: 'Charlie Check',
+      amount: '$470,000.00',
+      expected: 'HOLD',
+      icon: FileMinus,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'Amount Mismatch',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'Customer claims $470k paid, but ledger only shows $47k received.',
+      signals: 'PAYMENT_AMOUNT_MISMATCH'
+    },
+    {
+      id: 'reused_transaction',
+      title: 'Reused Transaction Attack',
+      vendor: 'Dave Duplicate',
+      amount: '$250.00',
+      expected: 'HOLD',
+      icon: Repeat,
+      color: 'border-amber-500/40 hover:border-amber-400 bg-amber-500/5 text-amber-400',
+      badge: 'Txn Reused',
+      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      description: 'Customer attempts to use a transaction reference already associated with another order.',
+      signals: 'DUPLICATE_TRANSACTION_REFERENCE'
+    }
   ];
 
   const presets = activeWorkflow === 'customer_order' ? orderPresets : invoicePresets;
-  const title = activeWorkflow === 'customer_order' ? 'Customer Order Verification Scenarios' : 'Invoice Fraud Demo Scenarios';
-  const subtitle = activeWorkflow === 'customer_order' ? 'Click scenario to run payment-to-order ledger verification' : 'Click any scenario to populate raw invoice payload — then hit "Analyze Invoice" to run live trace';
 
   return (
-    <div className="glass-panel p-5 rounded-3xl border border-slate-800 bg-slate-950/80 shadow-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-xl border ${activeWorkflow === 'customer_order' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'}`}>
-            <Sparkles className="w-4 h-4 animate-spin" style={{ animationDuration: '6s' }} />
+    <div className="glass-panel p-5 rounded-3xl border border-rose-500/30 bg-slate-950/90 shadow-[0_0_30px_rgba(244,63,94,0.1)]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
+            <Zap className="w-5 h-5 fill-rose-500/20" />
           </div>
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-200">
-              {title}
+            <h2 className="text-lg font-black uppercase tracking-widest text-slate-100">
+              ATTACK FRAUDGUARD
             </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {subtitle}
+            <p className="text-xs text-slate-400 mt-0.5 max-w-xl">
+              Simulate real-world transaction fraud and watch FraudGuard investigate it in real time.
             </p>
           </div>
         </div>
-        <span className="text-[11px] font-semibold text-slate-400 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
-          {presets.length} Preset Demos Ready
-        </span>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-${Math.min(presets.length, 3)} gap-4`}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {presets.map((preset) => {
           const IconComponent = preset.icon;
           return (
@@ -105,33 +144,40 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
             >
               <div>
                 <div className="flex items-start justify-between mb-3">
-                  <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 shadow-md">
-                    <IconComponent className="w-5 h-5" />
+                  <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 shadow-md">
+                    <IconComponent className="w-4 h-4" />
                   </div>
-                  <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border ${preset.badgeColor}`}>
+                  <span className={`text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${preset.badgeColor}`}>
                     {preset.badge}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-slate-100 group-hover:text-cyan-300 transition-colors">
+                <h3 className="text-sm font-bold text-slate-100 group-hover:text-white transition-colors">
                   {preset.title}
                 </h3>
-                <p className="text-xs font-semibold text-slate-300 mt-1">{preset.vendor}</p>
-                <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                <p className="text-[11px] text-slate-400 mt-2 line-clamp-3 leading-relaxed min-h-[48px]">
                   {preset.description}
                 </p>
+                <div className="mt-3 p-2 rounded-lg bg-slate-900/60 border border-slate-800/50">
+                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Expected Signals</span>
+                  <span className="text-[10px] text-rose-300 font-mono line-clamp-2 leading-tight">{preset.signals}</span>
+                </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+              <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-slate-500 block">Amount</span>
+                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Value At Risk</span>
                   <span className="font-mono text-slate-200 font-bold text-sm">{preset.amount}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-500 block">Expected Result</span>
-                  <span className={`text-xs font-black tracking-wider uppercase ${preset.expected === 'APPROVE' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Expected</span>
+                  <span className={`text-xs font-black tracking-wider uppercase ${preset.expected === 'APPROVE' || preset.expected === 'RELEASE' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {preset.expected}
                   </span>
                 </div>
+              </div>
+              
+              <div className="mt-3 w-full py-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-700/50 rounded-lg text-center text-[10px] font-bold uppercase tracking-widest text-slate-300 transition-colors">
+                Launch Attack
               </div>
             </button>
           );

@@ -4,7 +4,7 @@ import { FileText, ShoppingBag, ShieldCheck } from 'lucide-react';
 export const WORKFLOW_CONFIG = {
   invoice_fraud: {
     key: 'invoice_fraud',
-    label: 'Money Out (Invoices)',
+    label: 'MONEY OUT PROTECTION (Supplier Fraud)',
     shortLabel: 'Money Out',
     icon: FileText,
     badge: 'Core Demo',
@@ -18,7 +18,7 @@ export const WORKFLOW_CONFIG = {
   },
   customer_order: {
     key: 'customer_order',
-    label: 'Goods Out (Orders)',
+    label: 'GOODS OUT PROTECTION (Customer Fraud)',
     shortLabel: 'Goods Out',
     icon: ShoppingBag,
     badge: 'New Feature',

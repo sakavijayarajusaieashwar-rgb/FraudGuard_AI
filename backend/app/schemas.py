@@ -76,3 +76,14 @@ class InvoiceResponse(InvoiceBase):
 class HealthResponse(BaseModel):
     status: str
     message: str
+
+
+class DashboardMetricsResponse(BaseModel):
+    transactions_protected: int
+    fraud_blocked: int
+    potential_loss_prevented: float
+    money_out_prevented: float
+    goods_out_prevented: float
+    transactions_escalated: int
+    approval_rate: float
+    fraud_type_breakdown: dict

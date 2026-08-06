@@ -22,6 +22,7 @@ export default function App() {
   const [activeAgent, setActiveAgent] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [metrics, setMetrics] = useState(null);
 
   const filteredInvoices = invoices.filter(
     (inv) => inv.workflow_type === activeWorkflow || (!inv.workflow_type && activeWorkflow === 'invoice_fraud')
@@ -68,6 +69,7 @@ export default function App() {
       const data = await res.json();
       setUserEmail(data.email);
       fetchInvoices();
+      fetchMetrics();
     } catch (error) {
       setAuthToken(null);
       setUserEmail(null);
@@ -110,6 +112,20 @@ export default function App() {
       }
     } catch (e) {
       console.error('Failed to fetch invoices:', e);
+    }
+  };
+
+  const fetchMetrics = async () => {
+    if (!authToken) return;
+    try {
+      const res = await fetch('/api/dashboard/metrics', {
+        headers: authHeaders,
+      });
+      if (res.ok) {
+        setMetrics(await res.json());
+      }
+    } catch (e) {
+      console.error('Failed to fetch metrics:', e);
     }
   };
 
@@ -180,6 +196,7 @@ export default function App() {
           setActiveAgent(null);
           loadInvoiceDetails(invoiceId);
           fetchInvoices();
+          fetchMetrics();
         }
       } catch (e) {
         console.error('Error parsing SSE event:', e);
@@ -193,6 +210,7 @@ export default function App() {
       setActiveAgent(null);
       loadInvoiceDetails(invoiceId);
       fetchInvoices();
+      fetchMetrics();
     };
   };
 
@@ -298,6 +316,21 @@ export default function App() {
     setInvoices([]);
     setSelectedInvoice(null);
     setTraces([]);
+    setMetrics(null);
+    fetchMetrics();
+  };
+
+  const handleResetDemo = async () => {
+    try {
+      await fetch('/api/demo/reset', {
+        method: 'POST',
+        headers: authHeaders,
+      });
+      fetchInvoices();
+      fetchMetrics();
+    } catch (e) {
+      console.error('Reset failed:', e);
+    }
   };
 
   if (!authToken) {
@@ -306,12 +339,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-900 text-slate-100">
-      <Navbar backendConnected={backendConnected} onResetDB={handleResetDB} userEmail={userEmail} onLogout={handleLogout} />
+      <Navbar backendConnected={backendConnected} onResetDB={handleResetDemo} userEmail={userEmail} onLogout={handleLogout} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
         
-        {/* Invoice Fraud Stats Banner */}
-        <UnifiedStats items={invoices} />
+        {/* FraudGuard Business Impact Dashboard */}
+        <UnifiedStats metrics={metrics} />
 
         {/* Invoice Fraud Engine Indicator */}
         <WorkflowSelector activeWorkflow={activeWorkflow} onChange={setActiveWorkflow} />
