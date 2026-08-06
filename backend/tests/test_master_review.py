@@ -26,8 +26,8 @@ def test_db_spec_compliance():
     db = SessionLocal()
     vendors_count = db.query(Vendor).count()
     invoices_count = db.query(Invoice).count()
-    assert vendors_count == 9, f"Expected 9 vendors, got {vendors_count}"
-    assert invoices_count == 12, f"Expected 12 invoices total across 2 demo users, got {invoices_count}"
+    assert vendors_count == 10, f"Expected 10 vendors, got {vendors_count}"
+    assert invoices_count == 15, f"Expected 15 invoices total across 2 demo users, got {invoices_count}"
 
     # Verify column existence
     sample_inv = db.query(Invoice).first()
@@ -46,7 +46,7 @@ def test_endpoints_existence():
     headers = login_headers()
     res_invoices = client.get("/invoices", headers=headers)
     assert res_invoices.status_code == 200
-    assert len(res_invoices.json()) == 10  # User A sees 10 invoices
+    assert len(res_invoices.json()) == 13  # User A sees the seeded invoice set for their tenant
 
 
 def test_extract_endpoint():

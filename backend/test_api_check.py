@@ -2,13 +2,19 @@ import time
 import json
 import sqlite3
 from pathlib import Path
-import httpx
+from fastapi.testclient import TestClient
 
-base = 'http://127.0.0.1:8001'
+from app.main import app
+
+client = TestClient(app)
+
+login_res = client.post('/api/auth/login', json={'email': 'demo@fraudguard.ai', 'password': 'demo1234'})
+assert login_res.status_code == 200, login_res.text
+headers = {'Authorization': f"Bearer {login_res.json()['access_token']}"}
 
 print('=== BACKEND HEALTH ===')
 for path in ['/api/health', '/docs', '/openapi.json']:
-    resp = httpx.get(base + path, timeout=10.0)
+    resp = client.get(path, headers=headers if path.startswith('/api/') else None)
     print(path, resp.status_code)
     if path == '/api/health':
         print('health body', resp.json())
@@ -39,7 +45,7 @@ cases = [
 print('\n=== ANALYZE TEST CASES ===')
 for name, text in cases:
     t0 = time.perf_counter()
-    resp = httpx.post(base + '/api/analyze', json={'invoice_text': text}, timeout=30.0)
+    resp = client.post('/api/analyze', json={'invoice_text': text}, headers=headers)
     duration = time.perf_counter() - t0
     print('\nCASE', name, 'status', resp.status_code, 'duration', f'{duration:.2f}s')
     try:
@@ -57,22 +63,22 @@ for name, text in cases:
 
 print('\n=== ERROR HANDLING ===')
 for desc, payload in [('empty', {'invoice_text': ''}), ('garbled', {'invoice_text': 'asdflkj qwer poiuz 12345 !!! ???'})]:
-    resp = httpx.post(base + '/api/analyze', json=payload, timeout=30.0)
+    resp = client.post('/api/analyze', json=payload, headers=headers)
     print(desc, 'status', resp.status_code)
     print(resp.text)
 
 print('\n=== OVERRIDE CHECK ===')
-list_resp = httpx.get(base + '/api/invoices', timeout=10.0)
+list_resp = client.get('/api/invoices', headers=headers)
 print('list status', list_resp.status_code)
 invoices = list_resp.json()
 print('invoice count', len(invoices))
 if invoices:
     inv_id = invoices[0]['id']
     print('using invoice id', inv_id)
-    override_resp = httpx.post(base + f'/api/override/{inv_id}', json={'override': 'REJECTED', 'reason': 'Automated test override'})
+    override_resp = client.post(f'/api/override/{inv_id}', json={'override': 'REJECTED', 'reason': 'Automated test override'}, headers=headers)
     print('override status', override_resp.status_code)
     print('override body', override_resp.json())
-    after = httpx.get(base + f'/api/invoices/{inv_id}', timeout=10.0)
+    after = client.get(f'/api/invoices/{inv_id}', headers=headers)
     print('updated invoice status', after.json().get('status'))
 else:
     print('no invoices available to override')

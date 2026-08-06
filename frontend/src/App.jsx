@@ -10,7 +10,8 @@ import DecisionPanel from './components/DecisionPanel';
 import InvoiceHistory from './components/InvoiceHistory';
 import InvoiceUploadModal from './components/InvoiceUploadModal';
 import FraudGraph from './components/FraudGraph';
-import { Plus, Play, Network, Shield } from 'lucide-react';
+import InvestigatorPanel from './components/InvestigatorPanel';
+import { Plus, Play, Network, Shield, Search } from 'lucide-react';
 
 export default function App() {
   const [backendConnected, setBackendConnected] = useState(false);
@@ -378,10 +379,23 @@ export default function App() {
             <Network className="w-4 h-4" />
             <span>Fraud Relationship Graph</span>
           </button>
+          <button
+            onClick={() => setActiveTab('investigate')}
+            className={`py-3 px-6 font-bold text-xs uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'investigate'
+                ? 'border-cyan-400 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Search className="w-4 h-4" />
+            <span>AI Fraud Investigator</span>
+          </button>
         </div>
 
         {activeTab === 'graph' ? (
           <FraudGraph authToken={authToken} />
+        ) : activeTab === 'investigate' ? (
+          <InvestigatorPanel invoice={selectedInvoice} authToken={authToken} />
         ) : (
           /* Main Content Grid */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

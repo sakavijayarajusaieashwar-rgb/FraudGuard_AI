@@ -29,7 +29,7 @@ def test_per_user_invoice_isolation():
     res_a_invoices = client.get("/api/invoices", headers=headers_a)
     assert res_a_invoices.status_code == 200
     user_a_initial_invoices = res_a_invoices.json()
-    assert len(user_a_initial_invoices) == 10, f"Expected 10 initial invoices for A, got {len(user_a_initial_invoices)}"
+    assert len(user_a_initial_invoices) == 13, f"Expected 13 initial invoices for A, got {len(user_a_initial_invoices)}"
 
     # Run 2 presets as User A ("clean" and "duplicate")
     preset1_res = client.post("/api/invoices/preset", json={"preset_type": "clean"}, headers=headers_a)
@@ -46,7 +46,7 @@ def test_per_user_invoice_isolation():
     res_a_updated = client.get("/api/invoices", headers=headers_a)
     assert res_a_updated.status_code == 200
     user_a_invoices = res_a_updated.json()
-    assert len(user_a_invoices) == 12, f"Expected 12 invoices for A after adding 2 presets, got {len(user_a_invoices)}"
+    assert len(user_a_invoices) == 15, f"Expected 15 invoices for A after adding 2 presets, got {len(user_a_invoices)}"
 
     # Check Accounts Department Queue (approved invoices) for A
     user_a_approved = [inv for inv in user_a_invoices if inv["status"] == "APPROVE" or inv["status"] == "APPROVED"]

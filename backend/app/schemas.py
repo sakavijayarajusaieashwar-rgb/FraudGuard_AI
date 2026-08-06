@@ -87,3 +87,26 @@ class DashboardMetricsResponse(BaseModel):
     transactions_escalated: int
     approval_rate: float
     fraud_type_breakdown: dict
+
+
+class InvestigationRequest(BaseModel):
+    query: str
+
+
+class InvestigationResponse(BaseModel):
+    answer: str
+    evidence: List[str]
+    confidence_basis: str
+    recommended_human_checks: List[str]
+
+
+class TrustProfileResponse(BaseModel):
+    entity_name: str
+    entity_type: str
+    total_transactions: int
+    approved_count: int
+    escalated_count: int
+    rejected_count: int
+    avg_amount: float
+    known_bank_accounts: List[str]
+    risk_level: str

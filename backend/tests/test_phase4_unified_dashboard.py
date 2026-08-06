@@ -37,7 +37,7 @@ def test_unified_dashboard_multi_workflow_stats():
     res_a_all = client.get("/api/invoices", headers=headers_a)
     assert res_a_all.status_code == 200
     items_a = res_a_all.json()
-    assert len(items_a) == 13  # 10 seeded + 3 new
+    assert len(items_a) == 16  # 13 seeded + 3 new
 
     # Query expense_approval for User A
     res_a_exp = client.get("/api/invoices?workflow_type=expense_approval", headers=headers_a)

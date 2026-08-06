@@ -1,13 +1,13 @@
 import time
-import httpx
-from datetime import datetime
+from fastapi.testclient import TestClient
 
-BASE = 'http://127.0.0.1:8000'
-client = httpx.Client()
+from app.main import app
+
+client = TestClient(app)
 
 ts = int(time.time())
 user = {'email': f'test_order_{ts}@fraudguard.local', 'password':'Secret123!', 'full_name':'Test User'}
-res = client.post(f'{BASE}/api/auth/register', json=user)
+res = client.post('/api/auth/register', json=user)
 print('Register:', res.status_code)
 token = res.json().get('access_token')
 headers = {'Authorization': f'Bearer {token}'}
@@ -23,20 +23,18 @@ presets = [
 ]
 
 for p in presets:
-    # Get preset
-    rr = client.post(f'{BASE}/api/invoices/preset', json={'preset_type': p, 'workflow_type': 'customer_order'}, headers=headers)
+    rr = client.post('/api/invoices/preset', json={'preset_type': p, 'workflow_type': 'customer_order'}, headers=headers)
     print(f'Preset {p}:', rr.status_code)
-    
-    # Run analyze stream API
+
     inv_id = rr.json()['id']
+    invoice_text = rr.json().get('invoice_text') or ''
     print(f"Running analysis for invoice ID {inv_id}")
-    
-    an = client.get(f'{BASE}/api/invoices/{inv_id}/analyze/stream?token={token}', headers=headers, timeout=30.0)
-    print(f'Analysis stream HTTP Status:', an.status_code)
-    
-    # Check final result by getting invoice details
+
+    an = client.post('/api/analyze', json={'invoice_text': invoice_text, 'workflow_type': 'customer_order'}, headers=headers)
+    print(f'Analysis HTTP Status:', an.status_code)
+
     time.sleep(1)
-    inv_res = client.get(f'{BASE}/api/invoices/{inv_id}', headers=headers)
+    inv_res = client.get(f'/api/invoices/{inv_id}', headers=headers)
     inv = inv_res.json()
     print(f"Verdict for {p}: {inv.get('status')} - {inv.get('verdict_summary')}")
     print("-" * 50)

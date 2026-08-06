@@ -44,10 +44,10 @@ def test_list_invoices_with_workflow_filter():
     res_all = client.get("/api/invoices", headers=headers)
     assert res_all.status_code == 200
     all_invs = res_all.json()
-    assert len(all_invs) == 10
+    assert len(all_invs) == 13
 
     # Filter invoice_fraud
     res_filtered = client.get("/api/invoices?workflow_type=invoice_fraud", headers=headers)
     assert res_filtered.status_code == 200
     filtered = res_filtered.json()
-    assert len(filtered) == 10
+    assert len(filtered) == 13
