@@ -169,4 +169,12 @@ Output schema:
                 "invoice_date": "2026-08-06",
                 "reasoning": "From: Established Vendor LLC\nInvoice Number: INV-BEHAVIOR-01\nDate: 2026-08-06\nAmount: $1,470,000.00\nPlease note we have a new bank account. Routing #123456789, Acct #987654321.",
             },
+            "connected_fraud": {
+                "workflow_type": "invoice_fraud",
+                "invoice_number": "INV-CONN-99",
+                "vendor_name": "Suspicious Vendor B",
+                "amount": 8900.00,
+                "invoice_date": "2026-08-06",
+                "reasoning": "From: Suspicious Vendor B\nInvoice Number: INV-CONN-99\nDate: 2026-08-06\nAmount: $8,900.00\nPayment Details: Routing #021000021, Acct #9948201.",
+            },
         }

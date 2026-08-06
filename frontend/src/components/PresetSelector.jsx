@@ -54,6 +54,19 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
       badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
       description: 'New transaction is dramatically above historical baseline and introduces a new bank account.',
       signals: 'AMOUNT_BEHAVIOR_DEVIATION, NEW_VENDOR_BANK_ACCOUNT'
+    },
+    {
+      id: 'connected_fraud',
+      title: 'Connected Fraud Attack',
+      vendor: 'Suspicious Vendor B',
+      amount: '$8,900.00',
+      expected: 'REJECT',
+      icon: AlertOctagon,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'Graph Link Threat',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'Vendor B uses a bank account previously associated with rejected Vendor C.',
+      signals: 'SHARED_BANK_ACCOUNT_ACROSS_VENDORS, ENTITY_LINK_TO_PREVIOUS_RISK'
     }
   ];
 
@@ -132,7 +145,7 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${presets.length} gap-4`}>
         {presets.map((preset) => {
           const IconComponent = preset.icon;
           return (

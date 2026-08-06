@@ -276,6 +276,56 @@ def compute_deterministic_risk_flags(
                 "details": f"First observed use of bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} for this vendor."
             })
 
+    # 9. Cross-Transaction Graph Correlation
+    owner_id = None
+    if current_invoice_id:
+        current_rec = db.query(Invoice).filter(Invoice.id == current_invoice_id).first()
+        if current_rec:
+            owner_id = current_rec.owner_id
+
+    if owner_id and bank_account:
+        other_invoices = db.query(Invoice).filter(
+            Invoice.owner_id == owner_id,
+            Invoice.id != current_invoice_id
+        ).all()
+        
+        shared_vendors = set()
+        linked_to_risk = False
+        
+        for o_inv in other_invoices:
+            # Parse bank account from extra_data
+            o_bank = o_inv.extra_data.get("bank_account_number") or o_inv.extra_data.get("bank_account")
+            if not o_bank and o_inv.extra_data_json:
+                try:
+                    o_extra = json.loads(o_inv.extra_data_json)
+                    o_bank = o_extra.get("bank_account_number") or o_extra.get("bank_account")
+                except:
+                    pass
+            
+            if o_bank and str(o_bank).strip() == bank_account:
+                if o_inv.vendor_name.lower() != vendor_name.lower():
+                    shared_vendors.add(o_inv.vendor_name)
+                if o_inv.status in ["REJECT", "HOLD"]:
+                    linked_to_risk = True
+                    
+        if shared_vendors:
+            flags.append({
+                "flag": "SHARED_BANK_ACCOUNT_ACROSS_VENDORS",
+                "category": "IDENTITY",
+                "severity": "HIGH",
+                "score_impact": 35.0,
+                "details": f"Bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} is shared across unrelated vendors: {', '.join(shared_vendors)}."
+            })
+            
+        if linked_to_risk:
+            flags.append({
+                "flag": "ENTITY_LINK_TO_PREVIOUS_RISK",
+                "category": "IDENTITY",
+                "severity": "CRITICAL",
+                "score_impact": 40.0,
+                "details": f"Bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} was previously associated with a rejected or high-risk transaction."
+            })
+
     category_scores = {}
     for f in flags:
         cat = f.get("category", "OTHER")

@@ -30,6 +30,7 @@ from .schemas import (
 )
 from .services.heuristics import compute_deterministic_risk_flags, build_vendor_network
 from .services.cache import get_cached_preset
+from .services.graph import construct_fraud_graph
 from .agents.extraction import ExtractionAgent
 from .agents.risk import RiskAgent
 from .agents.decision import DecisionAgent
@@ -332,6 +333,10 @@ def health_check():
         message="FraudGuard AI Backend & 4 Autonomous Agents Ready."
     )
 
+@app.get("/api/graph")
+def get_graph_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    return construct_fraud_graph(db, current_user.id)
+
 @app.get("/api/dashboard/metrics", response_model=DashboardMetricsResponse)
 def get_dashboard_metrics(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     invoices = db.query(Invoice).filter(Invoice.owner_id == current_user.id).all()
@@ -418,11 +423,15 @@ def get_dashboard_metrics(db: Session = Depends(get_db), current_user: User = De
 def reset_demo(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db.query(Invoice).filter(Invoice.owner_id == current_user.id).delete()
     
-    # Re-seed behavioral baseline for Established Vendor LLC
+    # 1. Re-seed behavioral baseline for Established Vendor LLC
     past_invoices = [
-        {"vendor_name": "Established Vendor LLC", "amount": 145000.00, "invoice_number": "INV-EST-001", "bank_account_number": "111222333"},
-        {"vendor_name": "Established Vendor LLC", "amount": 152000.00, "invoice_number": "INV-EST-002", "bank_account_number": "111222333"},
-        {"vendor_name": "Established Vendor LLC", "amount": 149500.00, "invoice_number": "INV-EST-003", "bank_account_number": "111222333"}
+        {"vendor_name": "Established Vendor LLC", "amount": 145000.00, "invoice_number": "INV-EST-001", "bank_account_number": "111222333", "status": "APPROVED"},
+        {"vendor_name": "Established Vendor LLC", "amount": 152000.00, "invoice_number": "INV-EST-002", "bank_account_number": "111222333", "status": "APPROVED"},
+        {"vendor_name": "Established Vendor LLC", "amount": 149500.00, "invoice_number": "INV-EST-003", "bank_account_number": "111222333", "status": "APPROVED"},
+        # 2. Seed a previously REJECTED invoice from Vendor C using 9948201
+        {"vendor_name": "Vendor C", "amount": 25000.00, "invoice_number": "INV-REJ-888", "bank_account_number": "9948201", "status": "REJECT"},
+        # 3. Seed an established invoice for Vendor A using 3322110
+        {"vendor_name": "Vendor A", "amount": 12000.00, "invoice_number": "INV-EST-A01", "bank_account_number": "3322110", "status": "APPROVED"}
     ]
     
     for inv in past_invoices:
@@ -434,8 +443,8 @@ def reset_demo(db: Session = Depends(get_db), current_user: User = Depends(get_c
             vendor_name=inv["vendor_name"],
             amount=inv["amount"],
             invoice_date="2026-07-15",
-            status="APPROVED",
-            reasoning="Historical baseline",
+            status=inv["status"],
+            reasoning="Historical baseline data" if inv["status"] == "APPROVED" else "Rejected due to validation failure",
             extra_data_json=json.dumps(extra_data)
         )
         db.add(db_inv)

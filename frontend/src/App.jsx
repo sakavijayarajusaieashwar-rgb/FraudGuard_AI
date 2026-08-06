@@ -9,7 +9,8 @@ import LiveAgentTrace from './components/LiveAgentTrace';
 import DecisionPanel from './components/DecisionPanel';
 import InvoiceHistory from './components/InvoiceHistory';
 import InvoiceUploadModal from './components/InvoiceUploadModal';
-import { Plus, Play } from 'lucide-react';
+import FraudGraph from './components/FraudGraph';
+import { Plus, Play, Network, Shield } from 'lucide-react';
 
 export default function App() {
   const [backendConnected, setBackendConnected] = useState(false);
@@ -23,6 +24,7 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [metrics, setMetrics] = useState(null);
+  const [activeTab, setActiveTab] = useState('simulator');
 
   const filteredInvoices = invoices.filter(
     (inv) => inv.workflow_type === activeWorkflow || (!inv.workflow_type && activeWorkflow === 'invoice_fraud')
@@ -352,8 +354,37 @@ export default function App() {
         {/* 3 Preset Demos Panel */}
         <PresetSelector activeWorkflow={activeWorkflow} onSelectPreset={handleSelectPreset} isLoading={isAnalyzing} />
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Tab Selection */}
+        <div className="flex gap-2 border-b border-slate-800 pb-px">
+          <button
+            onClick={() => setActiveTab('simulator')}
+            className={`py-3 px-6 font-bold text-xs uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'simulator'
+                ? 'border-cyan-400 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            <span>Simulator & Workbench</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('graph')}
+            className={`py-3 px-6 font-bold text-xs uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'graph'
+                ? 'border-cyan-400 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Network className="w-4 h-4" />
+            <span>Fraud Relationship Graph</span>
+          </button>
+        </div>
+
+        {activeTab === 'graph' ? (
+          <FraudGraph authToken={authToken} />
+        ) : (
+          /* Main Content Grid */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Left Column (5 cols): Document Details & History */}
           <div className="lg:col-span-5 space-y-6">
@@ -468,9 +499,8 @@ export default function App() {
             />
 
           </div>
-
         </div>
-
+        )}
       </main>
 
       <InvoiceUploadModal

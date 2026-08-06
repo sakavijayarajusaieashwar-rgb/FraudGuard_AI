@@ -146,7 +146,9 @@ class UnifiedLLMProvider(BaseLLMProvider):
                     "invoice_date": data.get("invoice_date"),
                     "line_items": data.get("line_items") if isinstance(data.get("line_items"), list) else [],
                     "tax_id": data.get("tax_id"),
-                    "po_number": data.get("po_number")
+                    "po_number": data.get("po_number"),
+                    "bank_account_number": data.get("bank_account_number") or data.get("bank_account"),
+                    "routing_number": data.get("routing_number") or data.get("routing")
                 }
             except Exception:
                 pass
@@ -169,6 +171,9 @@ class UnifiedLLMProvider(BaseLLMProvider):
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', raw)
         tax_match = re.search(r'(?:tax\s*id|tin|ein)[:\s]*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
         po_match = re.search(r'(?:po\s*number|po)[:\s]*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
+        bank_match = re.search(r'(?:bank\s*account(?:\s*number)?|acct\s*#?|account\s*#)[:\s]*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
+        routing_match = re.search(r'(?:routing(?:\s*number)?|rtn|routing\s*#)[:\s]*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
+        
         line_items = []
         line_items_match = re.search(r'line items:?[\s\r\n]*((?:-.*[\r\n]*)+)', raw, re.IGNORECASE)
         if line_items_match:
@@ -195,7 +200,9 @@ class UnifiedLLMProvider(BaseLLMProvider):
             "invoice_date": date_match.group(1) if date_match else None,
             "line_items": line_items,
             "tax_id": tax_match.group(1).strip() if tax_match else None,
-            "po_number": po_match.group(1).strip() if po_match else None
+            "po_number": po_match.group(1).strip() if po_match else None,
+            "bank_account_number": bank_match.group(1).strip() if bank_match else None,
+            "routing_number": routing_match.group(1).strip() if routing_match else None
         }
 
 
