@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Calendar, Code, ChevronDown, ChevronUp, Play, Sparkles } from 'lucide-react';
+import { FileText, Calendar, Code, ChevronDown, ChevronUp, Play, Sparkles, TrendingUp, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) {
   const [showRaw, setShowRaw] = useState(true);
@@ -27,6 +27,9 @@ export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) 
 
   const lineItems = parsedRaw?.line_items || [];
   const isPending = invoice.status === 'PENDING';
+  const extraData = invoice.extra_data || {};
+  const behaviorProfile = extraData.behavior_profile;
+  const categoryScores = extraData.category_scores;
 
   return (
     <div className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col gap-4">
@@ -104,6 +107,49 @@ export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) 
           </div>
         </div>
       </div>
+
+      {/* Behavioral Profile and Categories */}
+      {(behaviorProfile || categoryScores) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
+          {behaviorProfile && (
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 mb-1">
+                <TrendingUp className="w-4 h-4" />
+                Behavioral Profile
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-300">
+                <span className="text-slate-500">Historical Median:</span>
+                <span className="font-mono font-medium">${behaviorProfile.median_amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-300">
+                <span className="text-slate-500">Known Accounts:</span>
+                <span className="font-mono">{behaviorProfile.known_bank_accounts?.length || 0}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-300">
+                <span className="text-slate-500">Past Invoices:</span>
+                <span className="font-mono">{behaviorProfile.invoice_count || 0}</span>
+              </div>
+            </div>
+          )}
+
+          {categoryScores && (
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-rose-400 mb-1">
+                <ShieldAlert className="w-4 h-4" />
+                Risk Categories
+              </div>
+              {Object.entries(categoryScores).map(([cat, score]) => (
+                <div key={cat} className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 capitalize">{cat.toLowerCase()} Risk:</span>
+                  <span className={`font-mono font-bold ${score > 20 ? 'text-rose-400' : 'text-amber-400'}`}>
+                    {score.toFixed(0)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Line Items Table if parsed */}
       {lineItems.length > 0 && (

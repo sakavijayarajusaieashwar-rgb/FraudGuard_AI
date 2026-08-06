@@ -496,6 +496,15 @@ async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[
     invoice.risk_signals_json = json.dumps(risk_output.get("risk_signals", []))
     invoice.confidence = float(decision_output.get("confidence") or 0.0)
     invoice.risk_score = float(risk_output.get("calculated_risk_score", 0.0))
+    
+    if deterministic_signals.get("behavior_profile") or risk_output.get("category_scores"):
+        extracted_copy = dict(extracted) if extracted else {}
+        if deterministic_signals.get("behavior_profile"):
+            extracted_copy["behavior_profile"] = deterministic_signals.get("behavior_profile")
+        if risk_output.get("category_scores"):
+            extracted_copy["category_scores"] = risk_output.get("category_scores")
+        invoice.extra_data_json = json.dumps(extracted_copy)
+        
     db.commit()
 
     if final_verdict == "APPROVE":
@@ -598,6 +607,15 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
             invoice_record.risk_signals_json = json.dumps(risk_output.get("risk_signals", []))
             invoice_record.confidence = float(decision_output.get("confidence") or 0.0)
             invoice_record.risk_score = float(risk_output.get("calculated_risk_score", 0.0))
+            
+            if deterministic_signals.get("behavior_profile") or risk_output.get("category_scores"):
+                extracted_copy = dict(extracted) if extracted else {}
+                if deterministic_signals.get("behavior_profile"):
+                    extracted_copy["behavior_profile"] = deterministic_signals.get("behavior_profile")
+                if risk_output.get("category_scores"):
+                    extracted_copy["category_scores"] = risk_output.get("category_scores")
+                invoice_record.extra_data_json = json.dumps(extracted_copy)
+                
             db.commit()
 
             if final_verdict == "APPROVE":

@@ -15,7 +15,7 @@ class RiskAgent:
 
         prompt = (
             f"Extracted Data:\n{extracted_data}\n\n"
-            f"Pre-computed Deterministic Risk Signals:\n{deterministic_signals}"
+            f"Pre-computed Deterministic Risk Signals (including Behavioral Context):\n{deterministic_signals}"
         )
         
         result = await llm_provider.generate_json(
@@ -23,9 +23,7 @@ class RiskAgent:
             user_prompt=prompt
         )
 
-        det_score = float(deterministic_signals.get("deterministic_risk_score", 0.0))
-        llm_score = float(result.get("calculated_risk_score") or det_score)
-        final_score = min(100.0, max(det_score, llm_score))
+        final_score = float(deterministic_signals.get("deterministic_risk_score", 0.0))
 
         signals = result.get("risk_signals") or []
         det_flags = deterministic_signals.get("flags") or []
@@ -35,6 +33,7 @@ class RiskAgent:
             if not any(s.get("rule") == df.get("flag") for s in signals):
                 signals.append({
                     "rule": df.get("flag"),
+                    "category": df.get("category", "OTHER"),
                     "severity": df.get("severity"),
                     "description": df.get("details")
                 })
@@ -42,5 +41,6 @@ class RiskAgent:
         return {
             "calculated_risk_score": final_score,
             "risk_signals": signals,
-            "thoughts": result.get("thoughts") or f"Synthesized {len(signals)} risk signals with deterministic score {det_score}/100."
+            "category_scores": deterministic_signals.get("category_scores", {}),
+            "thoughts": result.get("thoughts") or f"Synthesized {len(signals)} risk signals with deterministic score {final_score}/100."
         }

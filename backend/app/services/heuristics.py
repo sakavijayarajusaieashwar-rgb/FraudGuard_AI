@@ -46,6 +46,41 @@ def build_vendor_network(vendor_name: str, db: Session, threshold: float = 0.5) 
     return network
 
 
+def get_vendor_behavior_profile(vendor_name: str, db: Session) -> Dict[str, Any]:
+    if not vendor_name:
+        return None
+    invoices = db.query(Invoice).filter(Invoice.vendor_name == vendor_name, Invoice.status != 'REJECTED').all()
+    if not invoices:
+        return None
+    
+    amounts = [inv.amount for inv in invoices if inv.amount is not None and inv.amount > 0]
+    count = len(amounts)
+    if count == 0:
+        return {"invoice_count": len(invoices), "avg_amount": 0.0, "median_amount": 0.0, "max_amount": 0.0, "known_bank_accounts": []}
+    
+    avg_amount = sum(amounts) / count
+    sorted_amounts = sorted(amounts)
+    mid = count // 2
+    median_amount = (sorted_amounts[mid] + sorted_amounts[~mid]) / 2.0
+    max_amount = max(amounts)
+    
+    known_bank_accounts = []
+    for inv in invoices:
+        extra = inv.extra_data
+        if extra and extra.get("bank_account_number"):
+            acct = extra.get("bank_account_number").strip()
+            if acct and acct not in known_bank_accounts:
+                known_bank_accounts.append(acct)
+                
+    return {
+        "invoice_count": len(invoices),
+        "avg_amount": avg_amount,
+        "median_amount": median_amount,
+        "max_amount": max_amount,
+        "known_bank_accounts": known_bank_accounts,
+    }
+
+
 def compute_deterministic_risk_flags(
     invoice_data: Dict[str, Any], db: Session, current_invoice_id: int = None
 ) -> Dict[str, Any]:
@@ -59,6 +94,10 @@ def compute_deterministic_risk_flags(
     vendor_name = str(invoice_data.get("vendor_name", "") or "").strip()
     amount = float(invoice_data.get("amount", 0.0) or 0.0)
     inv_date_str = str(invoice_data.get("invoice_date", "") or "").strip()
+    bank_account = str(invoice_data.get("bank_account_number", "") or "").strip()
+    
+    behavior_profile = get_vendor_behavior_profile(vendor_name, db)
+
 
     # 1. Missing required fields check
     missing_fields = []
@@ -74,6 +113,7 @@ def compute_deterministic_risk_flags(
     if missing_fields:
         flags.append({
             "flag": "MISSING_REQUIRED_FIELDS",
+            "category": "DOCUMENT",
             "severity": "HIGH",
             "score_impact": 25.0,
             "details": f"Missing or null required fields: {', '.join(missing_fields)}"
@@ -89,6 +129,7 @@ def compute_deterministic_risk_flags(
         if existing_duplicate:
             flags.append({
                 "flag": "DUPLICATE_INVOICE_NUMBER",
+                "category": "DOCUMENT",
                 "severity": "CRITICAL",
                 "score_impact": 50.0,
                 "details": f"Invoice number '{inv_num}' already exists in ledger (ID: {existing_duplicate.id}, Amount: ${existing_duplicate.amount:.2f})."
@@ -115,6 +156,7 @@ def compute_deterministic_risk_flags(
             # Typosquatting / Suspicious similarity!
             flags.append({
                 "flag": "VENDOR_TYPOSQUATTING_SIMILARITY",
+                "category": "IDENTITY",
                 "severity": "CRITICAL",
                 "score_impact": 40.0,
                 "details": f"Vendor name '{vendor_name}' is suspiciously similar ({best_similarity*100:.0f}% match) to verified vendor '{similar_vendor_name}'."
@@ -122,6 +164,7 @@ def compute_deterministic_risk_flags(
         else:
             flags.append({
                 "flag": "UNKNOWN_VENDOR",
+                "category": "IDENTITY",
                 "severity": "MEDIUM",
                 "score_impact": 20.0,
                 "details": f"Vendor '{vendor_name}' is not in master verified vendor database."
@@ -130,18 +173,32 @@ def compute_deterministic_risk_flags(
         if not matched_vendor.is_known:
             flags.append({
                 "flag": "UNTRUSTED_VENDOR",
+                "category": "IDENTITY",
                 "severity": "HIGH",
                 "score_impact": 30.0,
                 "details": f"Vendor '{matched_vendor.name}' is flagged as untrusted/unverified in system database."
             })
 
     # 4. Amount Ratio Anomaly Check
-    if matched_vendor and matched_vendor.avg_invoice_amount > 0:
+    if behavior_profile and behavior_profile["invoice_count"] >= 2 and behavior_profile["median_amount"] > 0:
+        median_amt = behavior_profile["median_amount"]
+        ratio = amount / median_amt
+        if ratio >= 3.0:
+            flags.append({
+                "flag": "AMOUNT_BEHAVIOR_DEVIATION",
+                "category": "BEHAVIOR",
+                "severity": "HIGH",
+                "score_impact": 35.0,
+                "ratio": round(ratio, 2),
+                "details": f"Current amount (${amount:,.2f}) is {ratio:.1f}x higher than historical median (${median_amt:,.2f})."
+            })
+    elif matched_vendor and matched_vendor.avg_invoice_amount > 0:
         avg_amt = matched_vendor.avg_invoice_amount
         ratio = amount / avg_amt
         if ratio >= 3.0:
             flags.append({
                 "flag": "UNUSUAL_INVOICE_AMOUNT_RATIO",
+                "category": "BEHAVIOR",
                 "severity": "HIGH",
                 "score_impact": 35.0,
                 "ratio": round(ratio, 2),
@@ -152,6 +209,7 @@ def compute_deterministic_risk_flags(
     if amount >= 1000.0 and amount.is_integer() and amount % 500 == 0:
         flags.append({
             "flag": "ROUND_NUMBER_ANOMALY",
+            "category": "TRANSACTION",
             "severity": "LOW",
             "score_impact": 10.0,
             "details": f"Invoice amount (${amount:,.2f}) is an exact round figure."
@@ -165,6 +223,7 @@ def compute_deterministic_risk_flags(
             if parsed_date > today:
                 flags.append({
                     "flag": "FUTURE_INVOICE_DATE",
+                    "category": "TRANSACTION",
                     "severity": "MEDIUM",
                     "score_impact": 15.0,
                     "details": f"Invoice date '{inv_date_str}' is set in the future relative to system date."
@@ -172,6 +231,7 @@ def compute_deterministic_risk_flags(
             if parsed_date.weekday() in [5, 6]:  # Saturday or Sunday
                 flags.append({
                     "flag": "WEEKEND_INVOICE_DATE",
+                    "category": "TRANSACTION",
                     "severity": "LOW",
                     "score_impact": 5.0,
                     "details": f"Invoice date '{inv_date_str}' falls on a weekend."
@@ -199,12 +259,31 @@ def compute_deterministic_risk_flags(
     if is_payment_detail_change_requested:
         flags.append({
             "flag": "BANKING_CHANGE_UNVERIFIED",
+            "category": "PAYMENT",
             "severity": "HIGH",
             "score_impact": 35.0,
             "details": "Invoice text requests routing payment to unverified or newly changed banking details."
         })
 
-    total_score = min(100.0, sum(f["score_impact"] for f in flags))
+    # 8. Behavioral Bank Account Check
+    if behavior_profile and bank_account:
+        if behavior_profile["known_bank_accounts"] and bank_account not in behavior_profile["known_bank_accounts"]:
+            flags.append({
+                "flag": "NEW_VENDOR_BANK_ACCOUNT",
+                "category": "PAYMENT",
+                "severity": "HIGH",
+                "score_impact": 35.0,
+                "details": f"First observed use of bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} for this vendor."
+            })
+
+    category_scores = {}
+    for f in flags:
+        cat = f.get("category", "OTHER")
+        category_scores[cat] = category_scores.get(cat, 0.0) + f["score_impact"]
+        
+    # Cap each category to 40.0 max to prevent double counting related flags
+    total_score = sum(min(40.0, s) for s in category_scores.values())
+    total_score = min(100.0, total_score)
 
     return {
         "flags": flags,
@@ -213,6 +292,8 @@ def compute_deterministic_risk_flags(
         "vendor_matched": matched_vendor.name if matched_vendor else None,
         "missing_fields": missing_fields,
         "is_payment_detail_change_requested": is_payment_detail_change_requested,
+        "behavior_profile": behavior_profile,
+        "category_scores": category_scores,
     }
 
 

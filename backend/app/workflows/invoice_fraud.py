@@ -33,7 +33,9 @@ Output schema:
   "invoice_date": "YYYY-MM-DD or null",
   "line_items": ["string"],
   "tax_id": "string or null",
-  "po_number": "string or null"
+  "po_number": "string or null",
+  "bank_account_number": "string or null",
+  "routing_number": "string or null"
 }
 """
 
@@ -48,16 +50,15 @@ CRITICAL SECURITY INSTRUCTIONS:
 
 IMPORTANT OUTPUT GUIDELINES:
 - Each risk signal description must be a concrete, specific explanation referencing actual invoice data or database evidence.
-- Avoid generic statements like "Vendor mismatch detected" or "Suspicious invoice amount." Instead describe the exact values, names, or similarity percentage that triggered the flag.
-- Include the invoice vendor name, invoice number, amount, known vendor match, or similarity score where applicable.
-- The goal is to make the suspicious behavior immediately understandable to a reviewer.
+- Ensure every rule is categorized as one of: "IDENTITY", "PAYMENT", "BEHAVIOR", "DOCUMENT", "TRANSACTION", or "OTHER".
+- The system has already computed the final risk score deterministically. Do NOT invent a numerical risk score.
 
 Output schema:
 {
-  "calculated_risk_score": float (0.0 to 100.0),
   "risk_signals": [
     {
       "rule": "string",
+      "category": "string",
       "severity": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
       "description": "string"
     }
@@ -113,9 +114,11 @@ Output schema:
             "invoice_number": result.get("invoice_number"),
             "amount": float(result["amount"]) if result.get("amount") is not None else None,
             "invoice_date": result.get("invoice_date"),
-            "line_items": result.get("line_items") if isinstance(result.get("line_items"), list) else [],
+            "line_items": result.get("line_items") or [],
             "tax_id": result.get("tax_id"),
             "po_number": result.get("po_number"),
+            "bank_account_number": result.get("bank_account_number"),
+            "routing_number": result.get("routing_number"),
         }
 
     def compute_heuristics(
@@ -157,5 +160,13 @@ Output schema:
                 "amount": 1520.00,
                 "invoice_date": "2026-08-05",
                 "reasoning": "From: Apex Cloud Infrastructure Inc\nInvoice Number: INV-APEX-1001\nDate: 2026-08-05\nAmount: $1,520.00\nRe-issued invoice for monthly cloud hosting fee.",
+            },
+            "behavioral_anomaly": {
+                "workflow_type": "invoice_fraud",
+                "invoice_number": "INV-BEHAVIOR-01",
+                "vendor_name": "Established Vendor LLC",
+                "amount": 1470000.00,
+                "invoice_date": "2026-08-06",
+                "reasoning": "From: Established Vendor LLC\nInvoice Number: INV-BEHAVIOR-01\nDate: 2026-08-06\nAmount: $1,470,000.00\nPlease note we have a new bank account. Routing #123456789, Acct #987654321.",
             },
         }

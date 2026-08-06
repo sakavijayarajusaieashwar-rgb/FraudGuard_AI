@@ -28,7 +28,8 @@ Output schema:
   "invoice_number": "string or null",
   "amount": float or null,
   "invoice_date": "YYYY-MM-DD or null",
-  "transaction_reference": "string or null"
+  "transaction_reference": "string or null",
+  "bank_account_number": "string or null"
 }
 """
 
@@ -102,6 +103,7 @@ Output schema:
             "amount": float(result["amount"]) if result.get("amount") is not None else None,
             "invoice_date": result.get("invoice_date"),
             "transaction_reference": result.get("transaction_reference"),
+            "bank_account_number": result.get("bank_account_number"),
         }
 
     def compute_heuristics(

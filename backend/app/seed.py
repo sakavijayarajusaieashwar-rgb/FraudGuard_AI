@@ -96,6 +96,13 @@ def seed_database():
                 "first_seen_date": "2025-08-11",
                 "is_known": True,
             },
+            {
+                "name": "Established Vendor LLC",
+                "tax_id": "US-EIN-99999999",
+                "avg_invoice_amount": 150000.00,
+                "first_seen_date": "2024-01-01",
+                "is_known": True,
+            },
         ]
 
         for v_data in vendors_data:
@@ -103,7 +110,38 @@ def seed_database():
         db.commit()
 
         # 3. Seed Invoices for User A and User B
+        import json
         invoices_data_user_a = [
+            {
+                "owner_id": user_a.id,
+                "invoice_number": "INV-EST-001",
+                "vendor_name": "Established Vendor LLC",
+                "amount": 145000.00,
+                "invoice_date": "2026-05-01",
+                "status": "APPROVED",
+                "reasoning": "Historical invoice 1.",
+                "extra_data_json": json.dumps({"bank_account_number": "111222333", "routing_number": "000111222"}),
+            },
+            {
+                "owner_id": user_a.id,
+                "invoice_number": "INV-EST-002",
+                "vendor_name": "Established Vendor LLC",
+                "amount": 155000.00,
+                "invoice_date": "2026-06-01",
+                "status": "APPROVED",
+                "reasoning": "Historical invoice 2.",
+                "extra_data_json": json.dumps({"bank_account_number": "111222333", "routing_number": "000111222"}),
+            },
+            {
+                "owner_id": user_a.id,
+                "invoice_number": "INV-EST-003",
+                "vendor_name": "Established Vendor LLC",
+                "amount": 150000.00,
+                "invoice_date": "2026-07-01",
+                "status": "APPROVED",
+                "reasoning": "Historical invoice 3.",
+                "extra_data_json": json.dumps({"bank_account_number": "111222333", "routing_number": "000111222"}),
+            },
             {
                 "owner_id": user_a.id,
                 "invoice_number": "INV-APEX-1001",
