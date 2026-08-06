@@ -26,7 +26,7 @@ def test_db_spec_compliance():
     db = SessionLocal()
     vendors_count = db.query(Vendor).count()
     invoices_count = db.query(Invoice).count()
-    assert vendors_count == 8, f"Expected 8 vendors, got {vendors_count}"
+    assert vendors_count == 9, f"Expected 9 vendors, got {vendors_count}"
     assert invoices_count == 12, f"Expected 12 invoices total across 2 demo users, got {invoices_count}"
 
     # Verify column existence

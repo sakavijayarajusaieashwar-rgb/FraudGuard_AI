@@ -30,6 +30,12 @@ def ensure_db_schema():
         if "owner_id" not in columns:
             conn.execute(text("ALTER TABLE invoices ADD COLUMN owner_id INTEGER REFERENCES users(id);"))
             conn.commit()
+        if "workflow_type" not in columns:
+            conn.execute(text("ALTER TABLE invoices ADD COLUMN workflow_type VARCHAR(50) DEFAULT 'invoice_fraud';"))
+            conn.commit()
+        if "extra_data_json" not in columns:
+            conn.execute(text("ALTER TABLE invoices ADD COLUMN extra_data_json TEXT;"))
+            conn.commit()
         if "risk_score" not in columns:
             conn.execute(text("ALTER TABLE invoices ADD COLUMN risk_score FLOAT DEFAULT 0.0;"))
             conn.commit()

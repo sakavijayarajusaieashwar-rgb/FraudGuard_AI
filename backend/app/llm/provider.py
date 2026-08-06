@@ -8,10 +8,12 @@ from .base import BaseLLMProvider, clean_json_markdown
 
 class UnifiedLLMProvider(BaseLLMProvider):
     def get_env_vars(self):
+        provider_type = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+        if provider_type == "heuristic":
+            return "", "", "heuristic", False
         load_dotenv(override=True)
         gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
         openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-        provider_type = os.getenv("LLM_PROVIDER", "auto").strip().lower()
         use_cache = os.getenv("USE_DEMO_CACHE", "false").strip().lower() == "true"
         return gemini_key, openai_key, provider_type, use_cache
 
@@ -150,8 +152,19 @@ class UnifiedLLMProvider(BaseLLMProvider):
                 pass
 
         import re
-        vendor_match = re.search(r'(?:vendor|from):\s*([^\n,]+)', raw, re.IGNORECASE)
-        inv_match = re.search(r'(?:invoice\s*(?:number|no\.?|#)?[:#]?\s*|inv[-_]?)\s*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
+        vendor_match = re.search(
+            r'(?:vendor(?:\s+name)?|from/subject|from|bill\s+from|billed\s+by|company|supplier|issuer|remit\s+to)[:\s]*([^\n,\r]+)',
+            raw,
+            re.IGNORECASE
+        )
+        inv_match = re.search(
+            r'(?:invoice\s*(?:number|no\.?|#)?[:#]?|reference\s+number[:#]?)\s*([A-Za-z0-9-]+)',
+            raw,
+            re.IGNORECASE
+        )
+        if not inv_match:
+            inv_match = re.search(r'\b(INV-[A-Za-z0-9-]+)\b', raw, re.IGNORECASE)
+
         amt_match = re.search(r'(?:total\s+amount|amount|total)[:\s]*\$?\s*([0-9,]+\.[0-9]{2})', raw, re.IGNORECASE)
         date_match = re.search(r'(\d{4}-\d{2}-\d{2})', raw)
         tax_match = re.search(r'(?:tax\s*id|tin|ein)[:\s]*([A-Za-z0-9-]+)', raw, re.IGNORECASE)
@@ -161,8 +174,22 @@ class UnifiedLLMProvider(BaseLLMProvider):
         if line_items_match:
             line_items = [item.strip() for item in re.findall(r'-\s*(.+)', line_items_match.group(1)) if item.strip()]
 
+        vendor_val = vendor_match.group(1).strip() if vendor_match else None
+        if not vendor_val:
+            # Fallback: scan non-empty lines for company suffixes/keywords
+            for line in raw.splitlines():
+                cleaned_line = line.strip()
+                if not cleaned_line:
+                    continue
+                if any(kw in cleaned_line.lower() for kw in ["inc", "llc", "corp", "co", "ltd", "gmbh", "consultants", "solutions", "logistics", "services", "infrastructure", "supplies"]):
+                    # Strip any prefix like "From/Subject:" or "Vendor:"
+                    c = re.sub(r'^(?:from/subject|from|vendor(?:\s+name)?|bill\s+from|billed\s+by|company|supplier)[:\s]*', '', cleaned_line, flags=re.IGNORECASE).strip()
+                    if c:
+                        vendor_val = c
+                        break
+
         return {
-            "vendor_name": vendor_match.group(1).strip() if vendor_match else None,
+            "vendor_name": vendor_val,
             "invoice_number": inv_match.group(1).strip() if inv_match else None,
             "amount": float(amt_match.group(1).replace(',', '')) if amt_match else None,
             "invoice_date": date_match.group(1) if date_match else None,

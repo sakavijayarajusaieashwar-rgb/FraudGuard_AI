@@ -48,6 +48,7 @@ class RiskSignal(BaseModel):
 
 
 class InvoiceBase(BaseModel):
+    workflow_type: Optional[str] = "invoice_fraud"
     invoice_number: str
     vendor_name: str
     amount: float
@@ -62,6 +63,8 @@ class InvoiceBase(BaseModel):
     risk_signals: List[RiskSignal] = []
     verdict_summary: Optional[str] = None
     critic_notes: Optional[str] = None
+    extra_data_json: Optional[str] = None
+    extra_data: Optional[dict] = {}
 
 
 class InvoiceResponse(InvoiceBase):

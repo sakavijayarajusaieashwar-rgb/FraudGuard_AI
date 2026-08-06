@@ -42,7 +42,7 @@ def test_duplicate_preset_invoice_creation():
     response = client.post("/api/invoices/preset", json={"preset_type": "duplicate"}, headers=headers)
     assert response.status_code == 200
     invoice = response.json()
-    assert invoice["invoice_number"] == "INV-DUP-9901"
+    assert invoice["invoice_number"] == "INV-APEX-1001"
 
 
 def test_full_agent_pipeline_execution_sync():

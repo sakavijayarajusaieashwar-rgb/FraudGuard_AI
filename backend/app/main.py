@@ -1,9 +1,10 @@
 import os
+import io
 import json
 import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, Depends, HTTPException, Body, Request, status
+from fastapi import FastAPI, Depends, HTTPException, Body, Request, status, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -32,6 +33,7 @@ from .agents.extraction import ExtractionAgent
 from .agents.risk import RiskAgent
 from .agents.decision import DecisionAgent
 from .agents.critic import CriticAgent
+from .workflows import get_workflow, list_workflows
 
 # Ensure database tables exist
 Base.metadata.create_all(bind=engine)
@@ -69,11 +71,13 @@ critic_agent = CriticAgent()
 # Request Schemas
 class ExtractRequest(BaseModel):
     invoice_text: str
+    workflow_type: Optional[str] = "invoice_fraud"
 
 
 class AnalyzeRequest(BaseModel):
     invoice_text: str
     invoice_id: Optional[int] = None
+    workflow_type: Optional[str] = "invoice_fraud"
 
 
 class OverrideRequest(BaseModel):
@@ -83,6 +87,7 @@ class OverrideRequest(BaseModel):
 
 class PresetRequest(BaseModel):
     preset_type: str
+    workflow_type: Optional[str] = "invoice_fraud"
 
 
 class CreateInvoiceRequest(BaseModel):
@@ -91,6 +96,8 @@ class CreateInvoiceRequest(BaseModel):
     total_amount: float
     raw_content: Optional[str] = None
     invoice_date: Optional[str] = None
+    workflow_type: Optional[str] = "invoice_fraud"
+    extra_data: Optional[Dict[str, Any]] = None
 
 
 class LoginRequest(BaseModel):
@@ -140,60 +147,60 @@ def read_current_user(current_user: User = Depends(get_current_active_user)):
     return current_user
 
 
+@app.get("/workflows")
+@app.get("/api/workflows")
+def get_workflows_endpoint():
+    return list_workflows()
+
+
 @app.post("/invoices/preset")
 @app.post("/api/invoices/preset")
 def create_preset_invoice(req: PresetRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    wf_type = (req.workflow_type or "invoice_fraud").strip().lower()
+    workflow = get_workflow(wf_type)
+    presets = workflow.get_presets()
     preset_type = req.preset_type.strip().lower()
-    presets = {
-        "clean": {
-            "invoice_number": "INV-APEX-1001",
-            "vendor_name": "Apex Cloud Infrastructure Inc",
-            "amount": 1450.00,
-            "invoice_date": "2026-07-01",
-            "reasoning": "Line Items:\n- Kubernetes Dedicated Cluster Nodes: $1,000.00\n- Bandwidth Egress: $450.00\nTax ID: US-EIN-98421049",
-        },
-        "duplicate": {
-            "invoice_number": "INV-DUP-9901",
-            "vendor_name": "Global Office Supplies Co",
-            "amount": 3200.00,
-            "invoice_date": "2026-07-28",
-            "reasoning": "Line Items:\n- Executive Ergonomic Chairs: $3,200.00\nTax ID: US-EIN-88120491",
-        },
-        "suspicious_amount": {
-            "invoice_number": "INV-VORTEX-771",
-            "vendor_name": "Vortex Digital Marketing Consultants",
-            "amount": 65000.00,
-            "invoice_date": "2026-07-29",
-            "reasoning": "Line Items:\n- Brand Strategy Retainer (Urgent Wire Required): $65,000.00\nTax ID: US-EIN-77219401",
-        },
-        "suspicious_math": {
-            "invoice_number": "INV-NEXUS-881",
-            "vendor_name": "Nexus Logistics & Express",
-            "amount": 12500.00,
-            "invoice_date": "2026-07-20",
-            "reasoning": "Line Items:\n- Freight Shipping Charges: 5 shipments @ $1,000.00 each = $5,000.00\nBilled Total Amount: $12,500.00\nNote: Billed total $12,500 mismatch with line items sum $5,000.",
-        },
-        "typosquat": {
-            "invoice_number": "INV-APEX-2004",
-            "vendor_name": "Apex C1oud Infrastructure Inc",
-            "amount": 1450.00,
-            "invoice_date": "2026-08-01",
-            "reasoning": "Line Items:\n- Server Hosting: $1,450.00",
-        },
-    }
 
     if preset_type not in presets:
-        raise HTTPException(status_code=400, detail=f"Unknown preset_type '{req.preset_type}'.")
+        raise HTTPException(status_code=400, detail=f"Unknown preset_type '{req.preset_type}' for workflow '{wf_type}'.")
 
     data = presets[preset_type]
+    extra = data.get("extra_data", {})
+    inv_num = data["invoice_number"]
+
+    # For non-duplicate presets in invoice_fraud, ensure a unique invoice number so clean preset doesn't collide with historical ledger items
+    if "duplicate" not in preset_type and wf_type != "customer_order":
+        existing_dup = db.query(Invoice).filter(Invoice.invoice_number == inv_num).first()
+        if existing_dup:
+            suffix = int(datetime.utcnow().timestamp()) % 10000
+            inv_num = f"{data['invoice_number']}-{suffix}"
+    else:
+        # Ensure at least one prior invoice exists in ledger for duplicate preset testing
+        existing_count = db.query(Invoice).filter(Invoice.invoice_number == inv_num).count()
+        if existing_count == 0:
+            prior = Invoice(
+                owner_id=current_user.id,
+                workflow_type=wf_type,
+                invoice_number=inv_num,
+                vendor_name=data["vendor_name"],
+                amount=data["amount"],
+                invoice_date="2026-07-10",
+                status="APPROVED",
+                reasoning="Original processed invoice in ledger."
+            )
+            db.add(prior)
+            db.commit()
+
     invoice = Invoice(
         owner_id=current_user.id,
-        invoice_number=data["invoice_number"],
+        workflow_type=data.get("workflow_type", wf_type),
+        invoice_number=inv_num,
         vendor_name=data["vendor_name"],
         amount=data["amount"],
         invoice_date=data["invoice_date"],
         status="PENDING",
         reasoning=data.get("reasoning", "Preset demo invoice created."),
+        extra_data_json=json.dumps(extra) if extra else None,
     )
     db.add(invoice)
     db.commit()
@@ -204,20 +211,94 @@ def create_preset_invoice(req: PresetRequest, db: Session = Depends(get_db), cur
 @app.post("/invoices/create")
 @app.post("/api/invoices/create")
 def create_custom_invoice(req: CreateInvoiceRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    wf_type = (req.workflow_type or "invoice_fraud").strip().lower()
     invoice_date = req.invoice_date or datetime.now().strftime("%Y-%m-%d")
-    invoice_number = req.invoice_number or f"INV-{int(datetime.utcnow().timestamp())}"
+    prefix = "INV" if wf_type == "invoice_fraud" else ("EXP" if wf_type == "expense_approval" else "VEN")
+    invoice_number = req.invoice_number or f"{prefix}-{int(datetime.utcnow().timestamp())}"
     invoice = Invoice(
         owner_id=current_user.id,
+        workflow_type=wf_type,
         invoice_number=invoice_number,
-        vendor_name=req.vendor_name.strip() or "Custom Vendor",
+        vendor_name=req.vendor_name.strip() or "Custom Item",
         amount=req.total_amount,
         invoice_date=invoice_date,
         status="PENDING",
-        reasoning=req.raw_content or "Custom invoice created for analysis.",
+        reasoning=req.raw_content or "Custom submission created for analysis.",
+        extra_data_json=json.dumps(req.extra_data) if req.extra_data else None,
     )
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
+    return invoice
+
+
+@app.post("/invoices/upload-document")
+@app.post("/api/invoices/upload-document")
+async def upload_invoice_document(
+    file: UploadFile = File(...),
+    workflow_type: Optional[str] = Form("invoice_fraud"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Accepts uploaded document files (.pdf, .txt, .json, .csv, .md, .png, .jpg),
+    extracts document text, runs Extraction Agent to structure metadata, and
+    saves the invoice ready for immediate streaming analysis.
+    """
+    wf_type = (workflow_type or "invoice_fraud").strip().lower()
+    filename = file.filename or "uploaded_document"
+    contents = await file.read()
+    extracted_text = ""
+
+    # 1. Document text extraction based on file extension
+    if filename.lower().endswith(".pdf"):
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(contents))
+            page_texts = [page.extract_text() for page in reader.pages if page.extract_text()]
+            extracted_text = "\n".join(page_texts).strip()
+        except Exception as e:
+            print(f"[PDF Extraction Warning]: {e}")
+            extracted_text = contents.decode("utf-8", errors="ignore")
+    elif filename.lower().endswith((".json", ".txt", ".csv", ".md", ".log")):
+        extracted_text = contents.decode("utf-8", errors="ignore").strip()
+    else:
+        extracted_text = f"Uploaded Document File: {filename}\nFile Size: {len(contents)} bytes"
+
+    if not extracted_text:
+        extracted_text = f"Uploaded Document: {filename}"
+
+    # 2. Run Extraction Agent to structure vendor, invoice number, amount, date
+    extracted_metadata = {}
+    try:
+        extracted_metadata = await extraction_agent.extract(extracted_text, workflow_type=wf_type)
+    except Exception as e:
+        print(f"[Document Extraction Agent Error]: {e}")
+
+    item_ref = extracted_metadata.get("invoice_number") or extracted_metadata.get("claim_number") or extracted_metadata.get("application_id")
+    vendor_ref = extracted_metadata.get("vendor_name") or extracted_metadata.get("employee_name") or extracted_metadata.get("company_name")
+    amount_val = float(extracted_metadata.get("amount") or 0.0)
+    date_val = extracted_metadata.get("invoice_date") or datetime.now().strftime("%Y-%m-%d")
+
+    prefix = "INV" if wf_type == "invoice_fraud" else ("EXP" if wf_type == "expense_approval" else "VEN")
+    invoice_number = item_ref or f"{prefix}-DOC-{int(datetime.utcnow().timestamp())}"
+    vendor_name = vendor_ref or f"Doc: {filename}"
+
+    invoice = Invoice(
+        owner_id=current_user.id,
+        workflow_type=wf_type,
+        invoice_number=invoice_number,
+        vendor_name=vendor_name,
+        amount=amount_val,
+        invoice_date=date_val,
+        status="PENDING",
+        reasoning=f"Uploaded Document File: {filename}\n\nExtracted Content:\n{extracted_text}",
+        extra_data_json=json.dumps(extracted_metadata) if extracted_metadata else None,
+    )
+    db.add(invoice)
+    db.commit()
+    db.refresh(invoice)
+
     return invoice
 
 
@@ -253,8 +334,15 @@ def health_check():
 
 @app.get("/invoices", response_model=List[InvoiceResponse])
 @app.get("/api/invoices", response_model=List[InvoiceResponse])
-def list_invoices(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    return db.query(Invoice).filter(Invoice.owner_id == current_user.id).order_by(Invoice.id.desc()).all()
+def list_invoices(
+    workflow_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    query = db.query(Invoice).filter(Invoice.owner_id == current_user.id)
+    if workflow_type and workflow_type != "all":
+        query = query.filter(Invoice.workflow_type == workflow_type)
+    return query.order_by(Invoice.id.desc()).all()
 
 
 @app.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
@@ -314,56 +402,63 @@ def explain_flag(invoice_id: int, flag_index: int, db: Session = Depends(get_db)
 
 @app.post("/extract")
 async def extract_invoice_endpoint(req: ExtractRequest):
-    """Standalone Extraction Agent endpoint converting raw text to structured invoice JSON."""
+    """Standalone Extraction Agent endpoint converting raw text to structured JSON."""
     if not req.invoice_text or not req.invoice_text.strip():
         raise HTTPException(status_code=400, detail="invoice_text cannot be empty.")
     
     try:
-        result = await extraction_agent.extract(req.invoice_text)
+        result = await extraction_agent.extract(req.invoice_text, workflow_type=req.workflow_type)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
 
-async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[int] = None) -> Dict[str, Any]:
+async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[int] = None, workflow_type: Optional[str] = "invoice_fraud") -> Dict[str, Any]:
     """Runs live 4-agent autonomous execution pipeline."""
+    wf_type = workflow_type or "invoice_fraud"
+    workflow = get_workflow(wf_type)
     trace = []
 
     # Step 1: Extraction Agent
-    extracted = await extraction_agent.extract(invoice_text)
+    extracted = await extraction_agent.extract(invoice_text, workflow_type=wf_type)
+    item_ref = extracted.get("invoice_number") or extracted.get("claim_number") or extracted.get("application_id")
+    name_ref = extracted.get("vendor_name") or extracted.get("employee_name") or extracted.get("company_name") or "Unknown"
+    amount_val = float(extracted.get("amount") or 0.0)
+
     trace.append({
         "agent": "Extraction Agent",
         "step": "Document Extraction",
-        "status": "SUCCESS" if extracted.get("vendor_name") else "WARNING",
-        "thought": f"Extracted vendor '{extracted.get('vendor_name')}', amount ${extracted.get('amount')}, inv #{extracted.get('invoice_number')}.",
+        "status": "SUCCESS" if name_ref != "Unknown" else "WARNING",
+        "thought": f"Extracted '{name_ref}', amount ${amount_val}, ref #{item_ref}.",
         "data": extracted
     })
 
     # Save/Update invoice record in SQLite DB
-    inv_num = extracted.get("invoice_number") or f"INV-GEN-{db.query(Invoice).count()+1}"
-    amount_val = float(extracted.get("amount") or 0.0)
+    inv_num = item_ref or f"REC-GEN-{db.query(Invoice).count()+1}"
     
     invoice = Invoice(
         owner_id=owner_id,
+        workflow_type=wf_type,
         invoice_number=inv_num,
-        vendor_name=extracted.get("vendor_name") or "Unknown Vendor",
+        vendor_name=name_ref,
         amount=amount_val,
-        invoice_date=extracted.get("invoice_date") or "2026-08-05",
-        status="ANALYZING"
+        invoice_date=extracted.get("invoice_date") or datetime.now().strftime("%Y-%m-%d"),
+        status="ANALYZING",
+        extra_data_json=json.dumps(extracted)
     )
     db.add(invoice)
     db.commit()
     db.refresh(invoice)
 
     # Step 2: Compute Deterministic Risk Signals BEFORE Risk Agent
-    deterministic_signals = compute_deterministic_risk_flags(extracted, db, current_invoice_id=invoice.id)
+    deterministic_signals = workflow.compute_heuristics(extracted, db, current_record_id=invoice.id)
     try:
-        vendor_network = build_vendor_network(extracted.get("vendor_name"), db)
+        vendor_network = build_vendor_network(name_ref, db)
     except Exception:
         vendor_network = []
 
     # Step 3: Risk Agent
-    risk_output = await risk_agent.analyze_risk(extracted, deterministic_signals)
+    risk_output = await risk_agent.analyze_risk(extracted, deterministic_signals, workflow_type=wf_type)
     trace.append({
         "agent": "Risk Agent",
         "step": "Risk & Anomaly Analysis",
@@ -373,7 +468,7 @@ async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[
     })
 
     # Step 4: Decision Agent
-    decision_output = await decision_agent.decide(extracted, risk_output)
+    decision_output = await decision_agent.decide(extracted, risk_output, workflow_type=wf_type)
     trace.append({
         "agent": "Decision Agent",
         "step": "Verdict Synthesis",
@@ -383,7 +478,7 @@ async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[
     })
 
     # Step 5: Critic Agent
-    critic_output = await critic_agent.audit(extracted, risk_output, decision_output)
+    critic_output = await critic_agent.audit(extracted, risk_output, decision_output, workflow_type=wf_type)
     trace.append({
         "agent": "Critic Agent",
         "step": "Governance Audit",
@@ -402,6 +497,9 @@ async def _run_live_pipeline(invoice_text: str, db: Session, owner_id: Optional[
     invoice.confidence = float(decision_output.get("confidence") or 0.0)
     invoice.risk_score = float(risk_output.get("calculated_risk_score", 0.0))
     db.commit()
+
+    if final_verdict == "APPROVE":
+        workflow.on_approved(invoice, extracted, db)
 
     return {
         "invoice_id": invoice.id,
@@ -426,8 +524,8 @@ def _format_sse_event(data: Dict[str, Any]) -> str:
 
 def _build_invoice_text(invoice: Invoice) -> str:
     text_lines = [
-        f"From: {invoice.vendor_name}",
-        f"Invoice Number: {invoice.invoice_number}",
+        f"From/Subject: {invoice.vendor_name}",
+        f"Reference Number: {invoice.invoice_number}",
         f"Date: {invoice.invoice_date}",
         f"Total Amount: ${invoice.amount:,.2f}",
     ]
@@ -445,30 +543,35 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
     if invoice.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to access this invoice.")
 
+    wf_type = invoice.workflow_type or "invoice_fraud"
+    workflow = get_workflow(wf_type)
     invoice_text = _build_invoice_text(invoice)
 
     async def event_generator():
         try:
-            extracted = await extraction_agent.extract(invoice_text)
+            extracted = await extraction_agent.extract(invoice_text, workflow_type=wf_type)
+            name_ref = extracted.get("vendor_name") or extracted.get("employee_name") or extracted.get("company_name") or invoice.vendor_name
             yield _format_sse_event({
                 "agent_name": "Extraction Agent",
                 "step_name": "Document Extraction",
-                "status": "SUCCESS" if extracted.get("vendor_name") else "WARNING",
-                "thought_process": f"Extracted vendor '{extracted.get('vendor_name')}', amount ${extracted.get('amount')}, inv #{extracted.get('invoice_number')}.",
+                "status": "SUCCESS" if name_ref else "WARNING",
+                "thought_process": f"Extracted '{name_ref}', amount ${extracted.get('amount') or invoice.amount}.",
                 "output_data": extracted,
             })
 
             invoice_record = invoice
             invoice_record.status = "ANALYZING"
-            invoice_record.invoice_number = extracted.get("invoice_number") or invoice.invoice_number
-            invoice_record.vendor_name = extracted.get("vendor_name") or invoice.vendor_name
+            invoice_record.invoice_number = extracted.get("invoice_number") or extracted.get("claim_number") or extracted.get("application_id") or invoice.invoice_number
+            invoice_record.vendor_name = name_ref
             invoice_record.amount = float(extracted.get("amount") or invoice.amount or 0.0)
             invoice_record.invoice_date = extracted.get("invoice_date") or invoice.invoice_date
+            if extracted:
+                invoice_record.extra_data_json = json.dumps(extracted)
             db.commit()
             db.refresh(invoice_record)
 
-            deterministic_signals = compute_deterministic_risk_flags(extracted, db, current_invoice_id=invoice_record.id)
-            risk_output = await risk_agent.analyze_risk(extracted, deterministic_signals)
+            deterministic_signals = workflow.compute_heuristics(extracted, db, current_record_id=invoice_record.id)
+            risk_output = await risk_agent.analyze_risk(extracted, deterministic_signals, workflow_type=wf_type)
             yield _format_sse_event({
                 "agent_name": "Risk Agent",
                 "step_name": "Risk & Anomaly Analysis",
@@ -477,7 +580,7 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
                 "output_data": risk_output,
             })
 
-            decision_output = await decision_agent.decide(extracted, risk_output)
+            decision_output = await decision_agent.decide(extracted, risk_output, workflow_type=wf_type)
             yield _format_sse_event({
                 "agent_name": "Decision Agent",
                 "step_name": "Verdict Synthesis",
@@ -486,7 +589,7 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
                 "output_data": decision_output,
             })
 
-            critic_output = await critic_agent.audit(extracted, risk_output, decision_output)
+            critic_output = await critic_agent.audit(extracted, risk_output, decision_output, workflow_type=wf_type)
             final_verdict = critic_output.get("final_verdict", "ESCALATE")
             invoice_record.status = final_verdict
             invoice_record.flags_json = json.dumps([s.get("rule") for s in risk_output.get("risk_signals", [])])
@@ -496,6 +599,10 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
             invoice_record.confidence = float(decision_output.get("confidence") or 0.0)
             invoice_record.risk_score = float(risk_output.get("calculated_risk_score", 0.0))
             db.commit()
+
+            if final_verdict == "APPROVE":
+                workflow.on_approved(invoice_record, extracted, db)
+
             yield _format_sse_event({
                 "agent_name": "Critic Agent",
                 "step_name": "Governance Audit",
@@ -503,6 +610,11 @@ def analyze_invoice_stream(invoice_id: int, db: Session = Depends(get_db), curre
                 "thought_process": critic_output.get("critic_notes", ""),
                 "output_data": critic_output,
             })
+
+            try:
+                vendor_network = build_vendor_network(invoice_record.vendor_name, db)
+            except Exception:
+                vendor_network = []
 
             yield _format_sse_event({
                 "agent_name": "FraudGuard Orchestrator",
@@ -579,7 +691,7 @@ async def analyze_invoice_endpoint(req: AnalyzeRequest, db: Session = Depends(ge
 
     try:
         # 1. ALWAYS attempt live call first with an 8-second timeout safety net
-        return await asyncio.wait_for(_run_live_pipeline(req.invoice_text, db, owner_id=current_user.id), timeout=8.0)
+        return await asyncio.wait_for(_run_live_pipeline(req.invoice_text, db, owner_id=current_user.id, workflow_type=req.workflow_type), timeout=8.0)
     except Exception as e:
         print(f"[Analyze Endpoint] Live LLM pipeline exception or timeout: {e}")
         if use_cache_fallback:
@@ -605,6 +717,10 @@ def override_invoice_decision(invoice_id: int, req: OverrideRequest, db: Session
     invoice.status = req.override
     db.commit()
     db.refresh(invoice)
+
+    if req.override.upper() in ["APPROVE", "APPROVED"]:
+        workflow = get_workflow(invoice.workflow_type)
+        workflow.on_approved(invoice, invoice.extra_data, db)
 
     return {
         "message": f"Invoice {invoice_id} human override applied: [{req.override}]",

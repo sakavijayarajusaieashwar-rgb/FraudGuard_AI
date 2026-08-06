@@ -3,12 +3,13 @@ from .models import Vendor, Invoice, User
 
 
 def seed_database():
-    # Re-create tables cleanly
-    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-
     db = SessionLocal()
     try:
+        db.query(Invoice).delete()
+        db.query(Vendor).delete()
+        db.query(User).delete()
+        db.commit()
         # 1. Create demo users first
         from .auth import get_password_hash
 
@@ -58,6 +59,13 @@ def seed_database():
                 "tax_id": "US-EIN-55912048",
                 "avg_invoice_amount": 2500.00,
                 "first_seen_date": "2025-04-20",
+                "is_known": True,
+            },
+            {
+                "name": "Acme Corp",
+                "tax_id": "US-EIN-44102984",
+                "avg_invoice_amount": 4500.00,
+                "first_seen_date": "2024-01-15",
                 "is_known": True,
             },
             {

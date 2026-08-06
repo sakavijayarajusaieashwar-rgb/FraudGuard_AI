@@ -1,14 +1,25 @@
 import React from 'react';
-import { History, Play, Trash2 } from 'lucide-react';
+import { History, Trash2, FileText, CreditCard, Building2 } from 'lucide-react';
 
 export default function InvoiceHistory({ invoices, selectedId, onSelectInvoice, onDeleteInvoice }) {
   if (!invoices || invoices.length === 0) {
     return (
       <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 text-center text-xs text-slate-500">
-        No invoice records found in database.
+        No records found for current workflow filter.
       </div>
     );
   }
+
+  const getWorkflowBadge = (type) => {
+    switch (type) {
+      case 'expense_approval':
+        return { label: 'Expense', icon: CreditCard, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+      case 'vendor_onboarding':
+        return { label: 'Vendor', icon: Building2, color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' };
+      default:
+        return { label: 'Invoice', icon: FileText, color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' };
+    }
+  };
 
   return (
     <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col gap-3">
@@ -26,11 +37,19 @@ export default function InvoiceHistory({ invoices, selectedId, onSelectInvoice, 
           const isSelected = selectedId === inv.id;
           const statusBadge = {
             APPROVE: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+            APPROVED: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+            RELEASE: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
             ESCALATE: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+            ESCALATED: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+            HOLD: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
             REJECT: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+            REJECTED: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
             PENDING: 'bg-slate-800 text-slate-400 border-slate-700',
             ANALYZING: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30 animate-pulse',
           }[inv.status] || 'bg-slate-800 text-slate-400 border-slate-700';
+
+          const wfBadge = getWorkflowBadge(inv.workflow_type);
+          const WfIcon = wfBadge.icon;
 
           return (
             <div
@@ -44,8 +63,12 @@ export default function InvoiceHistory({ invoices, selectedId, onSelectInvoice, 
             >
               <div className="min-w-0 flex-1 pr-2">
                 <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded border flex items-center gap-1 ${wfBadge.color}`}>
+                    <WfIcon className="w-2.5 h-2.5" />
+                    <span>{wfBadge.label}</span>
+                  </span>
                   <span className="font-bold text-slate-200 truncate">{inv.vendor_name || 'Vendor'}</span>
-                  <span className={`px-2 py-0.2 text-[9px] font-bold rounded-full border ${statusBadge}`}>
+                  <span className={`px-2 py-0.2 text-[9px] font-bold rounded-full border ml-auto ${statusBadge}`}>
                     {inv.status}
                   </span>
                 </div>

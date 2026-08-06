@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { FileText, DollarSign, Calendar, Building2, Hash, Code, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, Calendar, Code, ChevronDown, ChevronUp, Play, Sparkles } from 'lucide-react';
 
-export default function InvoicePreview({ invoice }) {
-  const [showRaw, setShowRaw] = useState(false);
+export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) {
+  const [showRaw, setShowRaw] = useState(true);
 
   if (!invoice) {
     return (
@@ -10,7 +10,7 @@ export default function InvoicePreview({ invoice }) {
         <FileText className="w-12 h-12 text-slate-600 mb-3 animate-pulse" />
         <h3 className="text-base font-semibold text-slate-300">No Invoice Selected</h3>
         <p className="text-xs text-slate-500 max-w-xs mt-1">
-          Select a preset scenario above or upload a new invoice file to start multi-agent analysis.
+          Select a preset scenario above or upload a new invoice file to load data and run analysis.
         </p>
       </div>
     );
@@ -26,6 +26,7 @@ export default function InvoicePreview({ invoice }) {
   }
 
   const lineItems = parsedRaw?.line_items || [];
+  const isPending = invoice.status === 'PENDING';
 
   return (
     <div className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col gap-4">
@@ -50,6 +51,33 @@ export default function InvoicePreview({ invoice }) {
         </div>
       </div>
 
+      {/* Prominent Analyze Invoice Button */}
+      {onRunAnalysis && (
+        <button
+          disabled={isAnalyzing}
+          onClick={() => onRunAnalysis(invoice.id)}
+          className={`w-full py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg ${
+            isAnalyzing
+              ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed'
+              : isPending
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 border border-cyan-400/50 shadow-cyan-500/20 animate-pulse'
+              : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30'
+          }`}
+        >
+          {isAnalyzing ? (
+            <>
+              <Sparkles className="w-4 h-4 animate-spin text-cyan-400" />
+              <span>Multi-Agent Trace Running...</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 text-slate-950 fill-current" />
+              <span>{isPending ? 'Analyze Invoice (Run Live Trace)' : 'Re-Run Multi-Agent Trace'}</span>
+            </>
+          )}
+        </button>
+      )}
+
       {/* Grid Metadata */}
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center gap-2.5">
@@ -63,15 +91,23 @@ export default function InvoicePreview({ invoice }) {
         <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center gap-2.5">
           <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
           <div>
-            <span className="text-slate-500 block text-[10px]">Due Date</span>
-            <span className="text-slate-200 font-medium">{invoice.due_date || 'N/A'}</span>
+            <span className="text-slate-500 block text-[10px]">Status</span>
+            <span className={`font-bold uppercase text-[11px] ${
+              ['APPROVE', 'APPROVED', 'RELEASE'].includes(invoice.status)
+                ? 'text-emerald-400'
+                : ['REJECT', 'REJECTED'].includes(invoice.status)
+                ? 'text-rose-400'
+                : 'text-amber-400'
+            }`}>
+              {invoice.status || 'PENDING'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Line Items Table if parsed */}
       {lineItems.length > 0 && (
-        <div className="mt-2">
+        <div className="mt-1">
           <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Line Items Breakdown</h4>
           <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/40">
             <table className="w-full text-left text-xs">
@@ -99,7 +135,7 @@ export default function InvoicePreview({ invoice }) {
       )}
 
       {/* Raw Payload Collapsible */}
-      {invoice.raw_content && (
+      {invoice.reasoning && (
         <div className="mt-1">
           <button
             onClick={() => setShowRaw(!showRaw)}
@@ -107,14 +143,14 @@ export default function InvoicePreview({ invoice }) {
           >
             <div className="flex items-center gap-2">
               <Code className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Raw Document Payload</span>
+              <span>Loaded Raw Invoice Text / Payload</span>
             </div>
             {showRaw ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
           {showRaw && (
-            <pre className="mt-2 p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-cyan-400 overflow-x-auto max-h-48">
-              {invoice.raw_content}
+            <pre className="mt-2 p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-cyan-400 overflow-x-auto max-h-48 whitespace-pre-wrap">
+              {invoice.raw_content || invoice.reasoning}
             </pre>
           )}
         </div>
