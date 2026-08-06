@@ -20,7 +20,7 @@ from .auth import (
     get_password_hash,
 )
 from .database import engine, Base, get_db, ensure_db_schema
-from .models import Invoice, Vendor, User
+from .models import Invoice, Vendor, User, PaymentLedger
 from .schemas import (
     InvoiceResponse,
     HealthResponse,
@@ -341,6 +341,27 @@ def health_check():
 def get_graph_endpoint(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     return construct_fraud_graph(db, current_user.id)
 
+
+def _mask_acct(account_number: Optional[str]) -> str:
+    if not account_number or len(account_number) < 4:
+        return "****"
+    return f"****{account_number[-4:]}"
+
+
+def _get_invoice_graph_edges(graph: Dict[str, Any], inv: Invoice, bank: Optional[str]):
+    related_edges = []
+    invoice_node = f"invoice-{inv.id}"
+    bank_node_id = f"bank-{hashlib.sha256(bank.strip().encode('utf-8')).hexdigest()[:12]}" if bank else None
+
+    for edge in graph.get("edges", []):
+        if edge["source"] == invoice_node or edge["target"] == invoice_node:
+            related_edges.append(f"{edge['source']} --{edge['relationship']}--> {edge['target']} ({edge['evidence']})")
+        if bank_node_id and (edge["source"] == bank_node_id or edge["target"] == bank_node_id):
+            related_edges.append(f"{edge['source']} --{edge['relationship']}--> {edge['target']} ({edge['evidence']})")
+
+    return list(dict.fromkeys(related_edges))
+
+
 @app.post("/api/invoices/{invoice_id}/investigate", response_model=InvestigationResponse)
 async def investigate_invoice(
     invoice_id: int,
@@ -353,8 +374,17 @@ async def investigate_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found.")
         
     query = req.query.strip().lower()
+
+    # 1. Common deterministic answers that avoid any LLM call
+    bank = inv.extra_data.get("bank_account_number") or inv.extra_data.get("bank_account")
+    masked_bank = _mask_acct(bank) if bank else "None"
     
-    # 1. Deterministic Answers First
+    graph = construct_fraud_graph(db, current_user.id)
+    related_edges = _get_invoice_graph_edges(graph, inv, bank)
+
+    # Behavior profile
+    behavior = get_vendor_behavior_profile(inv.vendor_name, db) or {}
+
     if "risk score" in query or "score" in query:
         return InvestigationResponse(
             answer=f"The deterministic risk score for this transaction is {inv.risk_score:.0f}/100.",
@@ -362,7 +392,8 @@ async def investigate_invoice(
             confidence_basis="Deterministic database record",
             recommended_human_checks=["Review risk category breakdown if score is elevated."]
         )
-    if "payment verified" in query or "received the money" in query or "verified payment" in query or "dispatch blocked" in query:
+
+    if any(phrase in query for phrase in ["payment verified", "received the money", "verified payment", "dispatch blocked"]):
         is_order = inv.workflow_type == "customer_order"
         if not is_order:
             return InvestigationResponse(
@@ -371,34 +402,43 @@ async def investigate_invoice(
                 confidence_basis="Workflow check",
                 recommended_human_checks=[]
             )
-        
-        # Calculate exposure & verified details
-        amount = inv.amount
-        verified = 0.0
-        try:
-            flags = json.loads(inv.flags_json) if inv.flags_json else []
-            if "PAYMENT_AMOUNT_MISMATCH" in flags or "partial" in inv.reasoning.lower():
-                verified = 47000.0
-            elif "PAYMENT_NOT_FOUND" in flags or "fake" in inv.reasoning.lower():
-                verified = 0.0
+
+        order_ref = inv.invoice_number
+        tx_ref = inv.extra_data.get("transaction_reference")
+        payment = None
+        if tx_ref:
+            payment = db.query(PaymentLedger).filter(PaymentLedger.transaction_reference == tx_ref).first()
+        if not payment:
+            payment = db.query(PaymentLedger).filter(PaymentLedger.order_reference == order_ref).first()
+
+        if payment:
+            evidence = [f"Ledger match: {payment.transaction_reference} ({payment.status}, ${payment.amount:.2f})"]
+            if payment.status == "SETTLED" and abs(payment.amount - inv.amount) <= 0.01:
+                answer = f"Payment of ${inv.amount:,.2f} has been fully verified and settled in the ledger for order {order_ref}."
+                checks = ["Standard dispatch check."]
+            elif payment.status == "SETTLED":
+                unpaid = inv.amount - payment.amount
+                answer = (
+                    f"Dispatch was blocked because the ledger shows ${payment.amount:,.2f} settled for order {order_ref}, but the claimed order amount is ${inv.amount:,.2f}, leaving an unpaid exposure of ${unpaid:,.2f}."
+                )
+                evidence.append("PAYMENT_AMOUNT_MISMATCH")
+                checks = ["Do not release goods.", "Contact customer to resolve payment difference."]
             else:
-                verified = amount
-        except:
-            verified = amount
-            
-        unpaid = amount - verified
-        if unpaid > 0:
-            ans = f"Dispatch was blocked because only ${verified:,.2f} was verified against an expected ${amount:,.2f} order value, leaving an unpaid exposure of ${unpaid:,.2f}."
-            ev = ["PAYMENT_AMOUNT_MISMATCH"] if verified > 0 else ["PAYMENT_NOT_FOUND"]
-            checks = ["Do not release goods.", "Contact customer to resolve payment difference."]
+                answer = (
+                    f"The payment ledger contains a record for order {order_ref} but its status is '{payment.status}', so the payment has not been fully verified."
+                )
+                evidence.append("PAYMENT_NOT_SETTLED")
+                checks = ["Do not release goods until payment is settled.", "Confirm ledger status with finance team."]
         else:
-            ans = f"Payment of ${amount:,.2f} has been fully verified against the Payment Ledger. Status is approved."
-            ev = []
-            checks = ["Standard dispatch check."]
-            
+            answer = (
+                f"No matching settled payment was found in the ledger for order {order_ref}. Dispatch remains blocked until payment can be verified."
+            )
+            evidence = ["PAYMENT_NOT_FOUND"]
+            checks = ["Do not release goods.", "Ask the customer for payment confirmation and ledger reference."]
+
         return InvestigationResponse(
-            answer=ans,
-            evidence=ev,
+            answer=answer,
+            evidence=evidence,
             confidence_basis="Deterministic Payment Ledger matching",
             recommended_human_checks=checks
         )
@@ -413,20 +453,149 @@ async def investigate_invoice(
     
     # Graph connections related to this invoice
     graph = construct_fraud_graph(db, current_user.id)
-    related_edges = []
-    for e in graph["edges"]:
-        if e["source"] == f"invoice-{inv.id}" or e["target"] == f"invoice-{inv.id}":
-            related_edges.append(f"{e['source']} --{e['relationship']}--> {e['target']} ({e['evidence']})")
-        if bank:
-            bank_node_id = f"bank-{hashlib.sha256(bank.strip().encode('utf-8')).hexdigest()[:12]}"
-            if e["source"] == bank_node_id or e["target"] == bank_node_id:
-                related_edges.append(f"{e['source']} --{e['relationship']}--> {e['target']} ({e['evidence']})")
-
-    related_edges = list(set(related_edges))
+    related_edges = _get_invoice_graph_edges(graph, inv, bank)
 
     # Behavior profile
-    behavior = get_vendor_behavior_profile(inv.vendor_name, db)
+    behavior = get_vendor_behavior_profile(inv.vendor_name, db) or {}
     
+    # Deterministic query routing for common evidence-driven questions
+    if "risk score" in query or "score" in query:
+        return InvestigationResponse(
+            answer=f"The deterministic risk score for this transaction is {inv.risk_score:.0f}/100.",
+            evidence=[f"Risk score: {inv.risk_score:.0f}"],
+            confidence_basis="Deterministic database record",
+            recommended_human_checks=["Review risk category breakdown if score is elevated."]
+        )
+
+    if any(phrase in query for phrase in ["payment verified", "received the money", "verified payment", "dispatch blocked"]):
+        is_order = inv.workflow_type == "customer_order"
+        if not is_order:
+            return InvestigationResponse(
+                answer="Payment verification is only applicable to customer orders (Goods Out Protection). This is a supplier invoice.",
+                evidence=[],
+                confidence_basis="Workflow check",
+                recommended_human_checks=[]
+            )
+
+        order_ref = inv.invoice_number
+        tx_ref = inv.extra_data.get("transaction_reference")
+        payment = None
+        if tx_ref:
+            payment = db.query(PaymentLedger).filter(PaymentLedger.transaction_reference == tx_ref).first()
+        if not payment:
+            payment = db.query(PaymentLedger).filter(PaymentLedger.order_reference == order_ref).first()
+
+        if payment:
+            evidence = [f"Ledger match: {payment.transaction_reference} ({payment.status}, ${payment.amount:.2f})"]
+            verified = 0.0
+            if payment.status == "SETTLED" and abs(payment.amount - inv.amount) <= 0.01:
+                verified = inv.amount
+                answer = f"Payment of ${inv.amount:,.2f} has been fully verified and settled in the ledger for order {order_ref}."
+                checks = ["Standard dispatch check."]
+            elif payment.status == "SETTLED":
+                verified = payment.amount
+                unpaid = inv.amount - verified
+                answer = (
+                    f"Dispatch was blocked because the ledger shows ${verified:,.2f} settled for order {order_ref}, but the claimed order amount is ${inv.amount:,.2f}, leaving an unpaid exposure of ${unpaid:,.2f}."
+                )
+                evidence.append("PAYMENT_AMOUNT_MISMATCH")
+                checks = ["Do not release goods.", "Contact customer to resolve payment difference."]
+            else:
+                answer = (
+                    f"The payment ledger contains a record for order {order_ref} but its status is '{payment.status}', so the payment has not been fully verified."
+                )
+                evidence.append("PAYMENT_NOT_SETTLED")
+                checks = ["Do not release goods until payment is settled.", "Confirm ledger status with finance team."]
+        else:
+            answer = (
+                f"No matching settled payment was found in the ledger for order {order_ref}. Dispatch remains blocked until payment can be verified."
+            )
+            evidence = ["PAYMENT_NOT_FOUND"]
+            checks = ["Do not release goods.", "Ask the customer for payment confirmation and ledger reference."]
+
+        return InvestigationResponse(
+            answer=answer,
+            evidence=evidence,
+            confidence_basis="Deterministic Payment Ledger matching",
+            recommended_human_checks=checks
+        )
+
+    if any(phrase in query for phrase in ["bank account appeared", "seen before", "used before", "known bank account", "same bank account"]):
+        bank_accounts = [b for b in behavior.get("known_bank_accounts", []) if b]
+        if not bank:
+            return InvestigationResponse(
+                answer="This transaction does not contain a bank account number that FraudGuard can use for history matching.",
+                evidence=[],
+                confidence_basis="Missing bank account evidence",
+                recommended_human_checks=["Inspect the invoice for payment destination details."]
+            )
+        if bank in bank_accounts:
+            answer = (
+                f"Yes. The bank account ending in {bank[-4:]} has been seen before for vendor '{inv.vendor_name}'."
+                if bank in bank_accounts else ""
+            )
+            evidence = [f"Known bank account ending {bank[-4:]}" if bank in bank_accounts else "Unknown bank account"]
+            checks = ["Verify that this bank account is still authorized for this vendor."]
+        else:
+            answer = (
+                f"No. The bank account ending in {bank[-4:]} has not previously appeared for vendor '{inv.vendor_name}'."
+            )
+            evidence = ["NEW_VENDOR_BANK_ACCOUNT"]
+            checks = ["Confirm the new bank destination with the vendor using a trusted contact method."]
+
+        return InvestigationResponse(
+            answer=answer,
+            evidence=evidence,
+            confidence_basis="Deterministic vendor payment history",
+            recommended_human_checks=checks
+        )
+
+    if any(phrase in query for phrase in ["why was this blocked", "why blocked", "why did this reject", "reason for block", "blocked because"]):
+        answer = inv.reasoning or "This transaction was blocked based on deterministic risk signals stored in the ledger."
+        evidence = [f for f in inv.risk_signals if isinstance(f, dict) and f.get("rule")] or ["BLOCKED_TRANSACTION"]
+        return InvestigationResponse(
+            answer=answer,
+            evidence=[f["rule"] for f in evidence] if evidence and isinstance(evidence[0], dict) else evidence,
+            confidence_basis="Stored deterministic verdict",
+            recommended_human_checks=["Review the risk flags and vendor history before making a final payment decision."]
+        )
+
+    if any(phrase in query for phrase in ["amount abnormal", "why is this amount abnormal", "amount deviation", "unusual amount"]):
+        if behavior.get("avg_amount"):
+            answer = (
+                f"This amount of ${inv.amount:,.2f} is higher than the vendor's historical average of ${behavior['avg_amount']:,.2f}."
+            )
+            evidence = ["AMOUNT_BEHAVIOR_DEVIATION"] if any(f.get("rule") == "AMOUNT_BEHAVIOR_DEVIATION" for f in inv.risk_signals) else []
+        else:
+            answer = "FraudGuard does not have enough historical vendor data to determine whether the amount is abnormal."
+            evidence = []
+        return InvestigationResponse(
+            answer=answer,
+            evidence=evidence,
+            confidence_basis="Deterministic vendor behavior profile",
+            recommended_human_checks=["Compare this invoice amount to prior invoices from the same vendor."]
+        )
+
+    if any(phrase in query for phrase in ["trust profile", "vendor risk", "entity trust"]):
+        trust_level = "LOW"
+        approved_count = sum(1 for i in db.query(Invoice).filter(Invoice.owner_id == current_user.id, Invoice.vendor_name == inv.vendor_name).all() if i.status in ["APPROVE", "APPROVED", "RELEASE"])
+        escalated_count = sum(1 for i in db.query(Invoice).filter(Invoice.owner_id == current_user.id, Invoice.vendor_name == inv.vendor_name).all() if i.status == "ESCALATE")
+        rejected_count = sum(1 for i in db.query(Invoice).filter(Invoice.owner_id == current_user.id, Invoice.vendor_name == inv.vendor_name).all() if i.status in ["REJECT", "HOLD"])
+        if rejected_count > 0:
+            trust_level = "HIGH"
+        elif escalated_count > 0:
+            trust_level = "MEDIUM"
+
+        answer = (
+            f"Vendor '{inv.vendor_name}' has a trust rating of {trust_level} risk based on {approved_count} approved and {rejected_count} blocked transactions."
+        )
+        return InvestigationResponse(
+            answer=answer,
+            evidence=["KNOWN_VENDOR" if inv.vendor_name else "UNKNOWN_VENDOR"],
+            confidence_basis="Deterministic vendor trust profile",
+            recommended_human_checks=["Review the Entity Trust Profile details in the investigation sidebar."]
+        )
+
     evidence_context = {
         "transaction_details": {
             "invoice_number": inv.invoice_number,

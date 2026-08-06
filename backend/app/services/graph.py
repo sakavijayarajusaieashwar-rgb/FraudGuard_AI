@@ -122,8 +122,20 @@ def construct_fraud_graph(db: Session, user_id: int) -> Dict[str, Any]:
             # Link transaction to the ledger record if exists
             ledger_txn = db.query(PaymentLedger).filter(PaymentLedger.transaction_reference == tx_ref).first()
             if ledger_txn:
-                # Link to ledger bank account if any, or just record status
-                pass
+                ledger_node_id = f"ledger-{ledger_txn.id}"
+                ledger_label = f"Ledger {ledger_txn.transaction_reference}"
+                ledger_risk = "LOW" if ledger_txn.status == "SETTLED" else "MEDIUM"
+                add_node(ledger_node_id, "LEDGER_PAYMENT", ledger_label, ledger_risk, {
+                    "status": ledger_txn.status,
+                    "amount": ledger_txn.amount,
+                    "beneficiary": ledger_txn.beneficiary_name,
+                })
+                add_edge(tx_id, ledger_node_id, "RECORDED_IN", f"Transaction {tx_ref} recorded in payment ledger")
+                if ledger_txn.beneficiary_name and bank_account:
+                    add_edge(ledger_node_id, bank_id, "SETTLES_TO", f"Ledger payment settles to bank account {bank_mask}")
+                elif ledger_txn.beneficiary_name:
+                    add_node(f"beneficiary-{ledger_txn.beneficiary_name.replace(' ', '_').lower()}", "BENEFICIARY", ledger_txn.beneficiary_name, "LOW", {})
+                    add_edge(ledger_node_id, f"beneficiary-{ledger_txn.beneficiary_name.replace(' ', '_').lower()}", "BENEFICIARY", f"Payment goes to {ledger_txn.beneficiary_name}")
                 
     return {
         "nodes": nodes,
