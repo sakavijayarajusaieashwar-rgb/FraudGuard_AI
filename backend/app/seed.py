@@ -1,12 +1,16 @@
-from .database import engine, Base, SessionLocal
-from .models import Vendor, Invoice, User
+import json
+from .database import engine, Base, SessionLocal, ensure_db_schema
+from .models import Vendor, Invoice, User, PurchaseOrder, GoodsReceipt
 
 
 def seed_database():
+    ensure_db_schema()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         db.query(Invoice).delete()
+        db.query(PurchaseOrder).delete()
+        db.query(GoodsReceipt).delete()
         db.query(Vendor).delete()
         db.query(User).delete()
         db.commit()
@@ -109,8 +113,97 @@ def seed_database():
             db.add(Vendor(**v_data))
         db.commit()
 
-        # 3. Seed Invoices for User A and User B
-        import json
+        # 3. Seed Procurement Records
+        db.query(PurchaseOrder).delete()
+        db.query(GoodsReceipt).delete()
+        db.commit()
+
+        purchase_orders = [
+            PurchaseOrder(
+                po_number="PO-APEX-992",
+                vendor_name="Apex Cloud Infrastructure Inc",
+                amount=1450.00,
+                order_date="2026-07-01",
+                status="APPROVED",
+                owner_id=user_a.id,
+                line_items_json=json.dumps([
+                    {"description": "Kubernetes Dedicated Cluster Nodes", "quantity": 1.0, "unit_price": 1100.0, "total": 1100.0},
+                    {"description": "Bandwidth Egress & Network Load Balancer", "quantity": 1.0, "unit_price": 350.0, "total": 350.0}
+                ])
+            ),
+            PurchaseOrder(
+                po_number="PO-OFFICE-88",
+                vendor_name="Global Office Supplies Co",
+                amount=3200.00,
+                order_date="2026-07-10",
+                status="APPROVED",
+                owner_id=user_a.id,
+                line_items_json=json.dumps([
+                    "Executive Ergonomic Chairs: $3,200.00"
+                ])
+            ),
+            PurchaseOrder(
+                po_number="PO-UNKNOWN-01",
+                vendor_name="Phantom Consulting Group",
+                amount=9800.00,
+                order_date="2026-07-30",
+                status="APPROVED",
+                owner_id=user_a.id,
+                line_items_json=json.dumps([
+                    "Consulting Services: $9,800.00"
+                ])
+            ),
+            PurchaseOrder(
+                po_number="PO-OVERBILL-001",
+                vendor_name="Apex Cloud Infrastructure Inc",
+                amount=100000.00,
+                order_date="2026-07-15",
+                status="APPROVED",
+                owner_id=user_a.id,
+                line_items_json=json.dumps([
+                    {"description": "Enterprise Cloud Servers", "quantity": 100.0, "unit_price": 1000.0, "total": 100000.0}
+                ])
+            )
+        ]
+        db.add_all(purchase_orders)
+        db.commit()
+
+        goods_receipts = [
+            GoodsReceipt(
+                grn_number="GRN-APEX-01",
+                po_number="PO-APEX-992",
+                received_amount=1450.00,
+                received_date="2026-07-05",
+                status="RECEIVED",
+                owner_id=user_a.id,
+                notes="Goods receipt for monthly infrastructure services."
+            ),
+            GoodsReceipt(
+                grn_number="GRN-OFFICE-01",
+                po_number="PO-OFFICE-88",
+                received_amount=3200.00,
+                received_date="2026-07-11",
+                status="RECEIVED",
+                owner_id=user_a.id,
+                notes="Goods receipt for office chairs."
+            ),
+            GoodsReceipt(
+                grn_number="GRN-OVERBILL-001",
+                po_number="PO-OVERBILL-001",
+                received_amount=80000.00,
+                received_date="2026-07-20",
+                status="RECEIVED",
+                owner_id=user_a.id,
+                notes="Short shipment: only 80 units received.",
+                line_items_json=json.dumps([
+                    {"description": "Enterprise Cloud Servers", "quantity": 80.0, "unit_price": 1000.0, "total": 80000.0}
+                ])
+            )
+        ]
+        db.add_all(goods_receipts)
+        db.commit()
+
+        # 4. Seed Invoices for User A and User B
         invoices_data_user_a = [
             {
                 "owner_id": user_a.id,
@@ -150,6 +243,7 @@ def seed_database():
                 "invoice_date": "2026-07-01",
                 "status": "APPROVED",
                 "reasoning": "Standard recurring infrastructure monthly billing.",
+                "extra_data_json": json.dumps({"bank_account_number": "123459271", "routing_number": "998877665"}),
             },
             {
                 "owner_id": user_a.id,
@@ -157,8 +251,9 @@ def seed_database():
                 "vendor_name": "Global Office Supplies Co",
                 "amount": 3200.00,
                 "invoice_date": "2026-07-05",
-                "status": "APPROVED",
-                "reasoning": "Bulk office supplies purchase within normal range.",
+                "status": "REJECTED",
+                "reasoning": "Rejected office supplies invoice due to high risk.",
+                "extra_data_json": json.dumps({"bank_account_number": "123454418", "routing_number": "998877665"}),
             },
             {
                 "owner_id": user_a.id,

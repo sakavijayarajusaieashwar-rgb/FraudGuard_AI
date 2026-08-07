@@ -180,6 +180,178 @@ export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) 
         </div>
       )}
 
+      {/* Three-Way Match Visual flow */}
+      {extraData.document_forensics?.three_way_match && (
+        <div className="p-4 rounded-2xl border border-blue-500/20 bg-slate-950/65 flex flex-col gap-3 mt-1 text-xs">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span className="font-extrabold uppercase tracking-wider text-slate-300">Three-Way Procurement Match</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+              extraData.document_forensics.three_way_match.status === 'MATCH'
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+            }`}>
+              {extraData.document_forensics.three_way_match.status}
+            </span>
+          </div>
+
+          {/* Flow Diagram */}
+          <div className="flex flex-col items-center gap-1 bg-slate-900/20 py-2.5 rounded-xl border border-slate-800/40">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-slate-950/80 border border-slate-800 font-mono text-[10px] text-slate-350">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+              PO: {extraData.document_forensics.three_way_match.po_number}
+            </div>
+            <div className="text-slate-500 text-xs">↓</div>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-slate-950/80 border border-slate-800 font-mono text-[10px] text-slate-350">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              GRN: {extraData.document_forensics.three_way_match.grn_number}
+            </div>
+            <div className="text-slate-500 text-xs">↓</div>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-slate-950/80 border border-slate-850 font-mono text-[10px] text-slate-350">
+              <span className="w-2 h-2 rounded-full bg-rose-450 animate-pulse"></span>
+              Invoice: {invoice.invoice_number}
+            </div>
+          </div>
+
+          {/* Detailed items list */}
+          <div className="space-y-3">
+            {extraData.document_forensics.three_way_match.items.map((item, idx) => (
+              <div key={idx} className="p-3 bg-slate-900/45 rounded-xl border border-slate-800/50 space-y-2">
+                <div className="flex justify-between items-center border-b border-slate-800/60 pb-1.5">
+                  <span className="font-extrabold text-slate-200 truncate max-w-[170px]">{item.description}</span>
+                  <span className={`text-[10px] font-black uppercase ${item.status === 'MATCH' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {item.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 font-mono text-[10px] text-slate-400">
+                  <div className="bg-slate-950/30 p-1.5 rounded border border-slate-850">
+                    <span className="text-[8px] text-slate-500 uppercase font-bold block mb-0.5">Ordered (PO)</span>
+                    <span className="text-slate-300">{item.ordered_qty} units</span>
+                    <span className="text-slate-500 block text-[9px]">${item.po_price?.toFixed(2)}/u</span>
+                  </div>
+                  <div className="bg-slate-950/30 p-1.5 rounded border border-slate-850">
+                    <span className="text-[8px] text-slate-500 uppercase font-bold block mb-0.5">Received (GR)</span>
+                    <span className="text-slate-300">{item.received_qty} units</span>
+                    <span className="text-slate-500 block text-[9px]">${item.po_price?.toFixed(2)}/u</span>
+                  </div>
+                  <div className="bg-slate-950/30 p-1.5 rounded border border-slate-850">
+                    <span className="text-[8px] text-slate-500 uppercase font-bold block mb-0.5">Invoiced</span>
+                    <span className="text-slate-300">{item.invoiced_qty} units</span>
+                    <span className="text-slate-500 block text-[9px]">${item.invoice_price?.toFixed(2)}/u</span>
+                  </div>
+                </div>
+
+                {(item.unsupported_qty > 0 || item.unsupported_amount > 0) && (
+                  <div className="p-2.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] flex justify-between font-mono">
+                    <span>Unsupported: {item.unsupported_qty} units</span>
+                    <span className="font-extrabold">-${item.unsupported_amount?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {(extraData.document_forensics.three_way_match.total_unsupported_qty > 0 ||
+            extraData.document_forensics.three_way_match.total_unsupported_amount > 0) && (
+            <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/10 text-rose-300 leading-relaxed font-mono">
+              <span className="text-[9px] uppercase font-black text-rose-400 block mb-1">overbilling warning</span>
+              Total Unsupported Quantity: {extraData.document_forensics.three_way_match.total_unsupported_qty} units<br/>
+              Total Unsupported Amount: <span className="font-extrabold text-rose-450">${extraData.document_forensics.three_way_match.total_unsupported_amount?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Document Forensics Visual Comparison */}
+      {extraData.document_forensics && (
+        <div className="p-4 rounded-2xl border border-rose-500/20 bg-slate-950/65 flex flex-col gap-3.5 mt-1 text-xs">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span className="font-extrabold uppercase tracking-wider text-slate-300">Document Forensics</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
+              extraData.document_forensics.forensic_status === 'HIGH_RISK'
+                ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                : extraData.document_forensics.forensic_status === 'REVIEW'
+                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+            }`}>
+              {extraData.document_forensics.forensic_status?.replace('_', ' ')}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/40">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block border-b border-slate-800 pb-1 mb-1">Claimed By Invoice</span>
+              <div className="flex justify-between font-mono"><span>Vendor:</span><span className="text-slate-300 truncate max-w-[80px]" title={extraData.document_forensics.claimed_vendor}>{extraData.document_forensics.claimed_vendor || 'n/a'}</span></div>
+              <div className="flex justify-between font-mono"><span>Bank:</span><span className="text-slate-300">{extraData.document_forensics.claimed_bank || 'n/a'}</span></div>
+              <div className="flex justify-between font-mono"><span>Total:</span><span className="text-slate-300">${extraData.document_forensics.claimed_amount?.toFixed(2) || '0.00'}</span></div>
+              <div className="flex justify-between font-mono"><span>PO:</span><span className="text-slate-300">{extraData.document_forensics.claimed_po || 'n/a'}</span></div>
+            </div>
+
+            <div className="space-y-1.5 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/40">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block border-b border-slate-800 pb-1 mb-1">Verified By FraudGuard</span>
+              <div className="flex justify-between font-mono"><span>Known Bank:</span><span className="text-slate-300">{extraData.document_forensics.verified_bank || 'None'}</span></div>
+              <div className="flex justify-between font-mono"><span>PO Vendor:</span><span className="text-slate-300 truncate max-w-[80px]" title={extraData.document_forensics.verified_po_vendor}>{extraData.document_forensics.verified_po_vendor || 'n/a'}</span></div>
+              <div className="flex justify-between font-mono"><span>Expected Total:</span><span className="text-slate-300">{extraData.document_forensics.verified_po_amount ? `$${extraData.document_forensics.verified_po_amount.toFixed(2)}` : 'n/a'}</span></div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/40 space-y-1.5">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block border-b border-slate-800 pb-1 mb-1">Field Comparison</span>
+            <div className="flex justify-between font-mono">
+              <span>Vendor Identity:</span>
+              <span className={extraData.document_forensics.comparison_vendor === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                {extraData.document_forensics.comparison_vendor === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}
+              </span>
+            </div>
+            <div className="flex justify-between font-mono">
+              <span>Payment Destination Bank:</span>
+              <span className={extraData.document_forensics.comparison_bank === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                {extraData.document_forensics.comparison_bank === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}
+              </span>
+            </div>
+            <div className="flex justify-between font-mono">
+              <span>Invoice Total Amount:</span>
+              <span className={extraData.document_forensics.comparison_amount === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                {extraData.document_forensics.comparison_amount === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}
+              </span>
+            </div>
+          </div>
+
+          {extraData.document_forensics.forensic_signals?.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">Forensic Tampering Signals</span>
+              <div className="flex flex-wrap gap-1">
+                {extraData.document_forensics.forensic_signals.map((sig, i) => (
+                  <span key={i} className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/25 text-rose-300 font-mono text-[9px] font-bold">
+                    {sig}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {extraData.document_forensics.metadata && (
+            <div className="p-2 bg-slate-900/25 rounded-lg border border-slate-850 text-[10px] text-slate-400 space-y-1">
+              <span className="text-[9px] uppercase font-bold text-slate-500 block">Document Metadata Context</span>
+              {extraData.document_forensics.metadata.file_size && (
+                <div className="flex justify-between font-mono"><span>File Size:</span><span>{extraData.document_forensics.metadata.file_size} bytes</span></div>
+              )}
+              {extraData.document_forensics.metadata.pdf_producer && (
+                <div className="flex justify-between font-mono"><span>Producer / Creator:</span><span>{extraData.document_forensics.metadata.pdf_producer} / {extraData.document_forensics.metadata.pdf_creator}</span></div>
+              )}
+              {extraData.document_forensics.metadata.sha256_hash && (
+                <div className="flex justify-between font-mono"><span>SHA-256 Fingerprint:</span><span className="truncate max-w-[150px]">{extraData.document_forensics.metadata.sha256_hash}</span></div>
+              )}
+            </div>
+          )}
+
+          <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/10 text-cyan-300 text-[11px] leading-relaxed">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-cyan-400 block mb-0.5">Auditor Recommendation</span>
+            {extraData.document_forensics.recommended_action}
+          </div>
+        </div>
+      )}
+
       {/* Raw Payload Collapsible */}
       {invoice.reasoning && (
         <div className="mt-1">

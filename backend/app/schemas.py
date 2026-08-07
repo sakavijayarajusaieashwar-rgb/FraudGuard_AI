@@ -98,6 +98,17 @@ class InvestigationResponse(BaseModel):
     evidence: List[str]
     confidence_basis: str
     recommended_human_checks: List[str]
+    response_source: str
+
+
+class PaymentEvidence(BaseModel):
+    transaction_reference: Optional[str] = None
+    order_reference: Optional[str] = None
+    ledger_status: Optional[str] = None
+    ledger_amount: float = 0.0
+    beneficiary_name: Optional[str] = None
+    verified: bool = False
+    ledger_match_found: bool = False
 
 
 class TrustProfileResponse(BaseModel):
@@ -110,3 +121,75 @@ class TrustProfileResponse(BaseModel):
     avg_amount: float
     known_bank_accounts: List[str]
     risk_level: str
+
+
+class DocumentForensicsMetadata(BaseModel):
+    file_size: Optional[int] = None
+    page_count: Optional[int] = None
+    pdf_producer: Optional[str] = None
+    pdf_creator: Optional[str] = None
+    creation_date: Optional[str] = None
+    sha256_hash: Optional[str] = None
+    arithmetic_errors: List[str] = []
+
+
+class ThreeWayMatchItem(BaseModel):
+    description: str
+    ordered_qty: float
+    received_qty: float
+    invoiced_qty: float
+    po_price: float
+    invoice_price: float
+    unsupported_qty: float
+    unsupported_amount: float
+    status: str
+
+
+class ThreeWayMatchDetails(BaseModel):
+    po_number: str
+    grn_number: str
+    status: str
+    items: List[ThreeWayMatchItem] = []
+    total_unsupported_qty: float
+    total_unsupported_amount: float
+
+
+class DocumentForensicsResult(BaseModel):
+    document_id: int
+    document_type: str
+    forensic_status: str
+    claimed_vendor: Optional[str] = None
+    claimed_bank: Optional[str] = None
+    claimed_amount: Optional[float] = None
+    claimed_po: Optional[str] = None
+    verified_bank: Optional[str] = None
+    verified_po_vendor: Optional[str] = None
+    verified_po_amount: Optional[float] = None
+    comparison_vendor: str
+    comparison_amount: str
+    comparison_bank: str
+    forensic_signals: List[str] = []
+    recommended_action: str
+    metadata: Optional[DocumentForensicsMetadata] = None
+    three_way_match: Optional[ThreeWayMatchDetails] = None
+
+
+class InvoiceEvidenceResponse(BaseModel):
+    invoice_id: int
+    invoice_number: str
+    vendor_name: str
+    amount: float
+    invoice_date: str
+    status: str
+    workflow_type: str
+    risk_score: float
+    risk_level: str
+    risk_signals: List[RiskSignal] = []
+    primary_findings: List[str] = []
+    related_edges: List[str] = []
+    payment_evidence: Optional[PaymentEvidence] = None
+    vendor_behavior: Optional[dict] = None
+    trust_profile: Optional[TrustProfileResponse] = None
+    recommended_action: str
+    document_forensics: Optional[DocumentForensicsResult] = None
+

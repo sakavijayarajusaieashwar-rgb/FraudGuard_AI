@@ -1,9 +1,10 @@
+import json
 import re
 from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from ..models import Vendor, Invoice, PaymentLedger
+from ..models import Vendor, Invoice, PaymentLedger, PurchaseOrder, GoodsReceipt
 
 
 def string_similarity(a: str, b: str) -> float:
@@ -90,6 +91,12 @@ def compute_deterministic_risk_flags(
     """
     flags: List[Dict[str, Any]] = []
     
+    owner_id = None
+    if current_invoice_id:
+        current_rec = db.query(Invoice).filter(Invoice.id == current_invoice_id).first()
+        if current_rec:
+            owner_id = current_rec.owner_id
+
     inv_num = str(invoice_data.get("invoice_number", "") or "").strip()
     vendor_name = str(invoice_data.get("vendor_name", "") or "").strip()
     amount = float(invoice_data.get("amount", 0.0) or 0.0)
@@ -276,7 +283,109 @@ def compute_deterministic_risk_flags(
                 "details": f"First observed use of bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} for this vendor."
             })
 
-    # 9. Cross-Transaction Graph Correlation
+    # 9. Procurement Matching and Three-Way Invoice Validation
+    po_number = str(invoice_data.get("po_number") or "").strip()
+    if po_number:
+        po_query = db.query(PurchaseOrder).filter(PurchaseOrder.po_number == po_number)
+        if owner_id:
+            po_query = po_query.filter((PurchaseOrder.owner_id == owner_id) | (PurchaseOrder.owner_id == None))
+        po = po_query.first()
+        if not po:
+            flags.append({
+                "flag": "MISSING_PURCHASE_ORDER",
+                "category": "PROCUREMENT",
+                "severity": "HIGH",
+                "score_impact": 35.0,
+                "details": f"Invoice references purchase order '{po_number}' but no matching PO was found in the procurement system."
+            })
+        else:
+            if vendor_name and vendor_name.lower() != po.vendor_name.lower():
+                flags.append({
+                    "flag": "PO_VENDOR_MISMATCH",
+                    "category": "PROCUREMENT",
+                    "severity": "CRITICAL",
+                    "score_impact": 45.0,
+                    "details": f"Invoice vendor '{vendor_name}' does not match purchase order vendor '{po.vendor_name}'."
+                })
+            if amount and abs(amount - (po.amount or 0.0)) > 0.01:
+                flags.append({
+                    "flag": "PO_AMOUNT_MISMATCH",
+                    "category": "PROCUREMENT",
+                    "severity": "HIGH",
+                    "score_impact": 40.0,
+                    "details": f"Invoice amount ${amount:,.2f} differs from PO amount ${po.amount:,.2f} for PO '{po_number}'."
+                })
+            if po.line_items:
+                submitted_lines = [str(item).strip().lower() for item in invoice_data.get("line_items") or [] if str(item).strip()]
+                po_lines = [str(item).strip().lower() for item in po.line_items if str(item).strip()]
+                if submitted_lines and po_lines:
+                    matched = sum(1 for line in submitted_lines if any(line in po_line or po_line in line for po_line in po_lines))
+                    if matched < max(1, len(po_lines) // 2):
+                        flags.append({
+                            "flag": "PO_LINE_ITEM_MISMATCH",
+                            "category": "DOCUMENT",
+                            "severity": "MEDIUM",
+                            "score_impact": 25.0,
+                            "details": f"Submitted invoice line items do not sufficiently match purchase order '{po_number}'."
+                        })
+            gr_query = db.query(GoodsReceipt).filter(GoodsReceipt.po_number == po_number)
+            if owner_id:
+                gr_query = gr_query.filter((GoodsReceipt.owner_id == owner_id) | (GoodsReceipt.owner_id == None))
+            gr = gr_query.first()
+            if not gr:
+                flags.append({
+                    "flag": "NO_GOODS_RECEIPT",
+                    "category": "PROCUREMENT",
+                    "severity": "HIGH",
+                    "score_impact": 35.0,
+                    "details": f"No goods receipt was found for purchase order '{po_number}'."
+                })
+            else:
+                if abs(amount - gr.received_amount) > 0.01:
+                    flags.append({
+                        "flag": "GOODS_RECEIPT_AMOUNT_MISMATCH",
+                        "category": "PROCUREMENT",
+                        "severity": "HIGH",
+                        "score_impact": 40.0,
+                        "details": f"Invoice amount ${amount:,.2f} differs from goods receipt amount ${gr.received_amount:,.2f} for PO '{po_number}'."
+                    })
+                if gr.status and gr.status.upper() != "RECEIVED":
+                    flags.append({
+                        "flag": "GOODS_RECEIPT_NOT_CONFIRMED",
+                        "category": "PROCUREMENT",
+                        "severity": "MEDIUM",
+                        "score_impact": 20.0,
+                        "details": f"Goods receipt '{gr.grn_number}' for PO '{po_number}' is not confirmed as RECEIVED."
+                    })
+
+    # 10. Line Item Amount Mismatch Check
+    def _sum_line_item_amounts(items: List[str]) -> Optional[float]:
+        total = 0.0
+        count = 0
+        for item in items:
+            if not item:
+                continue
+            amounts = re.findall(r'\$?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?)', item)
+            if amounts:
+                try:
+                    value = float(amounts[-1].replace(',', ''))
+                    total += value
+                    count += 1
+                except Exception:
+                    continue
+        return total if count > 0 else None
+
+    line_item_total = _sum_line_item_amounts(invoice_data.get("line_items") or [])
+    if line_item_total is not None and amount and abs(line_item_total - amount) > 1.0:
+        flags.append({
+            "flag": "LINE_ITEM_AMOUNT_MISMATCH",
+            "category": "DOCUMENT",
+            "severity": "MEDIUM",
+            "score_impact": 25.0,
+            "details": f"Sum of extracted line item amounts (${line_item_total:,.2f}) does not match invoice total (${amount:,.2f})."
+        })
+
+    # 11. Cross-Transaction Graph Correlation
     owner_id = None
     if current_invoice_id:
         current_rec = db.query(Invoice).filter(Invoice.id == current_invoice_id).first()
@@ -323,6 +432,80 @@ def compute_deterministic_risk_flags(
                 "category": "IDENTITY",
                 "severity": "CRITICAL",
                 "score_impact": 40.0,
+                "details": f"Bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} was previously associated with a rejected or high-risk transaction."
+            })
+
+    # Run document forensics dynamically and incorporate its signals
+    from .document_forensics import run_document_forensics
+    
+    # Construct a mock/temporary invoice object if not already available
+    invoice_obj = None
+    if current_invoice_id:
+        invoice_obj = db.query(Invoice).filter(Invoice.id == current_invoice_id).first()
+        
+    if not invoice_obj:
+        invoice_obj = Invoice(
+            id=current_invoice_id or 0,
+            vendor_name=vendor_name,
+            amount=amount,
+            invoice_number=inv_num,
+            invoice_date=inv_date_str,
+            extra_data_json=json.dumps(invoice_data)
+        )
+        
+    forensics_res = run_document_forensics(invoice_obj, db)
+    
+    for sig in forensics_res.get("forensic_signals", []):
+        # Prevent double adding duplicate flags
+        if any(f["flag"] == sig for f in flags):
+            continue
+            
+        if sig == "DOCUMENT_HASH_DUPLICATE":
+            flags.append({
+                "flag": "DOCUMENT_HASH_DUPLICATE",
+                "category": "DOCUMENT",
+                "severity": "HIGH",
+                "score_impact": 45.0,
+                "details": "This exact document file has been submitted previously (exact hash match)."
+            })
+        elif sig == "DUPLICATE_INVOICE_REFERENCE":
+            flags.append({
+                "flag": "DUPLICATE_INVOICE_REFERENCE",
+                "category": "DOCUMENT",
+                "severity": "HIGH",
+                "score_impact": 35.0,
+                "details": "An invoice with the same vendor name and invoice number already exists in history."
+            })
+        elif sig == "DOCUMENT_TYPE_MISMATCH":
+            flags.append({
+                "flag": "DOCUMENT_TYPE_MISMATCH",
+                "category": "DOCUMENT",
+                "severity": "MEDIUM",
+                "score_impact": 20.0,
+                "details": "The uploaded file extension does not match its internal document structure."
+            })
+        elif sig == "INVOICE_BANK_ACCOUNT_MISMATCH":
+            flags.append({
+                "flag": "INVOICE_BANK_ACCOUNT_MISMATCH",
+                "category": "PAYMENT",
+                "severity": "HIGH",
+                "score_impact": 45.0,
+                "details": f"Invoice bank account ({forensics_res['claimed_bank']}) does not match previously verified bank account ({forensics_res['verified_bank']}) for this vendor."
+            })
+        elif sig == "INVOICE_TOTAL_ARITHMETIC_MISMATCH":
+            flags.append({
+                "flag": "INVOICE_TOTAL_ARITHMETIC_MISMATCH",
+                "category": "DOCUMENT",
+                "severity": "HIGH",
+                "score_impact": 30.0,
+                "details": f"Deterministic math verification failed: {', '.join(forensics_res['metadata']['arithmetic_errors'])}"
+            })
+        elif sig == "ENTITY_LINK_TO_PREVIOUS_RISK":
+            flags.append({
+                "flag": "ENTITY_LINK_TO_PREVIOUS_RISK",
+                "category": "IDENTITY",
+                "severity": "CRITICAL",
+                "score_impact": 50.0,
                 "details": f"Bank account ending in {bank_account[-4:] if len(bank_account) > 4 else bank_account} was previously associated with a rejected or high-risk transaction."
             })
 

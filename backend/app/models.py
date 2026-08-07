@@ -16,6 +16,53 @@ class Vendor(Base):
     is_known = Column(Boolean, default=True)
 
 
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    po_number = Column(String(255), unique=True, index=True, nullable=False)
+    vendor_name = Column(String(255), nullable=False)
+    amount = Column(Float, nullable=False)
+    order_date = Column(String(50), nullable=True)
+    status = Column(String(50), default="APPROVED")
+    line_items_json = Column(Text, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    @property
+    def line_items(self):
+        if not self.line_items_json:
+            return []
+        try:
+            return json.loads(self.line_items_json)
+        except Exception:
+            return []
+
+
+class GoodsReceipt(Base):
+    __tablename__ = "goods_receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    grn_number = Column(String(255), unique=True, index=True, nullable=False)
+    po_number = Column(String(255), index=True, nullable=False)
+    received_amount = Column(Float, nullable=False)
+    received_date = Column(String(50), nullable=True)
+    status = Column(String(50), default="RECEIVED")
+    notes = Column(Text, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    line_items_json = Column(Text, nullable=True)
+
+    @property
+    def line_items(self):
+        if not self.line_items_json:
+            return []
+        try:
+            return json.loads(self.line_items_json)
+        except Exception:
+            return []
+
+
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 

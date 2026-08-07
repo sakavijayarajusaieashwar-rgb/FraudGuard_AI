@@ -36,7 +36,10 @@ class CriticAgent:
                 "VENDOR_NAME_SIMILARITY",
                 "PAYMENT_NOT_FOUND",
                 "PAYMENT_AMOUNT_MISMATCH",
-                "ORDER_REFERENCE_MISMATCH"
+                "ORDER_REFERENCE_MISMATCH",
+                "ENTITY_LINK_TO_PREVIOUS_RISK",
+                "DOCUMENT_HASH_DUPLICATE",
+                "INVOICE_BANK_ACCOUNT_MISMATCH"
             ]
             for s in signals
         )

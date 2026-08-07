@@ -25,6 +25,7 @@ def get_db():
 def ensure_db_schema():
     """Apply lightweight schema updates for missing SQLite columns."""
     with engine.connect() as conn:
+        # Check invoices table
         result = conn.execute(text("PRAGMA table_info(invoices);"))
         columns = [row[1] for row in result.fetchall()]
         if "owner_id" not in columns:
@@ -48,3 +49,21 @@ def ensure_db_schema():
         if "confidence" not in columns:
             conn.execute(text("ALTER TABLE invoices ADD COLUMN confidence FLOAT DEFAULT 0.0;"))
             conn.commit()
+
+        # Check purchase_orders table
+        po_result = conn.execute(text("PRAGMA table_info(purchase_orders);"))
+        po_columns = [row[1] for row in po_result.fetchall()]
+        if "owner_id" not in po_columns:
+            conn.execute(text("ALTER TABLE purchase_orders ADD COLUMN owner_id INTEGER REFERENCES users(id);"))
+            conn.commit()
+
+        # Check goods_receipts table
+        gr_result = conn.execute(text("PRAGMA table_info(goods_receipts);"))
+        gr_columns = [row[1] for row in gr_result.fetchall()]
+        if "owner_id" not in gr_columns:
+            conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN owner_id INTEGER REFERENCES users(id);"))
+            conn.commit()
+        if "line_items_json" not in gr_columns:
+            conn.execute(text("ALTER TABLE goods_receipts ADD COLUMN line_items_json TEXT;"))
+            conn.commit()
+

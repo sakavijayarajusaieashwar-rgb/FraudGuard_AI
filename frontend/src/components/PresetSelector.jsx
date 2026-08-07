@@ -1,5 +1,4 @@
-import React from 'react';
-import { CheckCircle2, AlertOctagon, ShieldAlert, Zap, TrendingUp, DollarSign, Repeat, FileMinus } from 'lucide-react';
+import { CheckCircle2, AlertOctagon, ShieldAlert, Zap, TrendingUp, DollarSign, Repeat, FileMinus, AlertTriangle } from 'lucide-react';
 
 export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSelectPreset, isLoading }) {
   const invoicePresets = [
@@ -15,6 +14,58 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
       badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
       description: 'Normal trusted vendor. Normal amount. Known identity. No duplicate.',
       signals: 'None (Clean)'
+    },
+    {
+      id: 'clean_three_way',
+      title: 'Clean Three-Way Match',
+      vendor: 'Apex Cloud Infrastructure',
+      amount: '$1,450.00',
+      expected: 'APPROVE',
+      icon: CheckCircle2,
+      color: 'border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/5 text-emerald-400',
+      badge: '3-Way Match',
+      badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      description: 'Clean invoice matches PO and GR completely with 0 discrepancy.',
+      signals: 'None (Clean)'
+    },
+    {
+      id: 'procurement_overbilling',
+      title: 'Procurement Overbilling Attack',
+      vendor: 'Apex Cloud Infrastructure',
+      amount: '$100,000.00',
+      expected: 'REJECT',
+      icon: AlertTriangle,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'Quantity Discrepancy',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'Invoice charges for 100 units, but Goods Receipt records only 80 units received.',
+      signals: 'GOODS_RECEIPT_AMOUNT_MISMATCH'
+    },
+    {
+      id: 'price_manipulation',
+      title: 'Price Manipulation Attack',
+      vendor: 'Apex Cloud Infrastructure',
+      amount: '$120,000.00',
+      expected: 'REJECT',
+      icon: AlertTriangle,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'Price Inflated',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'Unit price raised from PO ($1,000) to Invoice ($1,200) without approval.',
+      signals: 'PO_AMOUNT_MISMATCH'
+    },
+    {
+      id: 'payment_tampering',
+      title: 'Payment Instruction Tampering',
+      vendor: 'Apex Cloud Infrastructure',
+      amount: '$1,450.00',
+      expected: 'REJECT',
+      icon: ShieldAlert,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.15)] border-rose-400/60',
+      badge: 'Hero Scenario',
+      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
+      description: 'Clean vendor, PO, and GR. But invoice bank (****4418) is changed and matches rejected entity (****4418).',
+      signals: 'INVOICE_BANK_ACCOUNT_MISMATCH, ENTITY_LINK_TO_PREVIOUS_RISK'
     },
     {
       id: 'typosquat',
@@ -41,6 +92,32 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
       badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
       description: 'Previously processed invoice submitted again.',
       signals: 'DUPLICATE_INVOICE_NUMBER'
+    },
+    {
+      id: 'arithmetic_manipulation',
+      title: 'Arithmetic Manipulation',
+      vendor: 'Apex Cloud Infrastructure',
+      amount: '$1,720.00',
+      expected: 'ESCALATE',
+      icon: AlertTriangle,
+      color: 'border-amber-500/40 hover:border-amber-400 bg-amber-500/5 text-amber-400',
+      badge: 'Math Discrepancy',
+      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      description: 'Line items sum to $1,520, but invoice total claims $1,720 ($200 unexplained difference).',
+      signals: 'INVOICE_TOTAL_ARITHMETIC_MISMATCH'
+    },
+    {
+      id: 'po_vendor_mismatch',
+      title: 'Procurement PO Mismatch',
+      vendor: 'Vortex Marketing Consultants',
+      amount: '$1,450.00',
+      expected: 'REJECT',
+      icon: ShieldAlert,
+      color: 'border-rose-500/40 hover:border-rose-400 bg-rose-500/5 text-rose-400',
+      badge: 'PO Mismatch',
+      badgeColor: 'bg-rose-500/10 text-rose-400 border-rose-500/30',
+      description: 'Invoice references PO-APEX-992, but vendor name on PO is Apex Cloud Infrastructure Inc.',
+      signals: 'PO_VENDOR_MISMATCH'
     },
     {
       id: 'behavioral_anomaly',

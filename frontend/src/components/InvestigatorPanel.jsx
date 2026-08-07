@@ -5,6 +5,7 @@ export default function InvestigatorPanel({ invoice, authToken }) {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [invoiceEvidence, setInvoiceEvidence] = useState(null);
   const [trustProfile, setTrustProfile] = useState(null);
 
   const suggestionChips = [
@@ -16,22 +17,23 @@ export default function InvestigatorPanel({ invoice, authToken }) {
 
   useEffect(() => {
     if (invoice && authToken) {
-      fetchTrustProfile();
-      // Clear chat history when switching invoices
+      fetchInvoiceEvidence();
       setMessages([]);
     }
   }, [invoice, authToken]);
 
-  const fetchTrustProfile = async () => {
+  const fetchInvoiceEvidence = async () => {
     try {
-      const res = await fetch(`/api/trust-profile?entity_name=${encodeURIComponent(invoice.vendor_name)}&entity_type=VENDOR`, {
+      const res = await fetch(`/api/invoices/${invoice.id}/evidence`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       if (res.ok) {
-        setTrustProfile(await res.json());
+        const data = await res.json();
+        setInvoiceEvidence(data);
+        setTrustProfile(data.trust_profile || null);
       }
     } catch (e) {
-      console.error('Failed to load trust profile:', e);
+      console.error('Failed to load invoice evidence:', e);
     }
   };
 
@@ -39,7 +41,6 @@ export default function InvestigatorPanel({ invoice, authToken }) {
     const text = textToSend || query;
     if (!text.trim() || isLoading) return;
 
-    // Add user message to log
     setMessages(prev => [...prev, { role: 'user', text }]);
     setQuery('');
     setIsLoading(true);
@@ -137,7 +138,6 @@ export default function InvestigatorPanel({ invoice, authToken }) {
                     <div className="space-y-3">
                       <p className="text-slate-100 font-medium leading-relaxed">{msg.answer || msg.text}</p>
                       
-                      {/* Structured Evidence Tags */}
                       {msg.evidence && msg.evidence.length > 0 && (
                         <div className="pt-2 border-t border-slate-800/80">
                           <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500 block mb-1.5">Evidence Context</span>
@@ -151,7 +151,6 @@ export default function InvestigatorPanel({ invoice, authToken }) {
                         </div>
                       )}
 
-                      {/* Structured Human Verification checks */}
                       {msg.checks && msg.checks.length > 0 && (
                         <div className="p-2.5 rounded-lg bg-cyan-950/20 border border-cyan-500/10 mt-2">
                           <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 block mb-1">Recommended Human Checks</span>
@@ -225,79 +224,129 @@ export default function InvestigatorPanel({ invoice, authToken }) {
       {/* Trust Profile Sidebar (4 cols) */}
       <div className="lg:col-span-4 space-y-6">
         
-        {/* Vendor Trust Profile Widget */}
         <div className="glass-panel p-5 rounded-3xl border border-slate-800 bg-slate-950/80 shadow-xl space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <Users className="w-5 h-5 text-cyan-400" />
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">
-              Entity Trust Profile
+              Explainability Dashboard
             </h3>
           </div>
 
-          {trustProfile ? (
+          {invoiceEvidence ? (
             <div className="space-y-4 text-xs">
               <div>
-                <h4 className="text-base font-black text-slate-100">{trustProfile.entity_name}</h4>
+                <h4 className="text-base font-black text-slate-100">{invoiceEvidence.vendor_name}</h4>
                 <p className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                  Verified Supplier
+                  {invoiceEvidence.workflow_type === 'customer_order' ? 'Goods Out Protection' : 'Invoice Fraud' }
                 </p>
               </div>
 
-              {/* Trust/Risk Badge */}
               <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800/80 flex items-center justify-between">
-                <span className="font-semibold text-slate-400">Risk Assessment:</span>
-                <span className={`text-xs font-black tracking-widest uppercase px-3 py-1 rounded-full border ${
-                  trustProfile.risk_level === 'HIGH' ? 'bg-rose-500/15 text-rose-400 border-rose-500/30' :
-                  trustProfile.risk_level === 'MEDIUM' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                  'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                }`}>
-                  {trustProfile.risk_level} RISK
+                <span className="font-semibold text-slate-400">Recommended Action</span>
+                <span className="text-xs font-black tracking-widest uppercase px-3 py-1 rounded-full border bg-cyan-500/10 text-cyan-300 border-cyan-500/20">
+                  {invoiceEvidence.recommended_action}
                 </span>
               </div>
 
-              {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 text-center">
-                  <span className="text-[9px] uppercase font-bold text-slate-500 block">Total Audits</span>
-                  <span className="text-sm font-bold font-mono mt-1 block">{trustProfile.total_transactions}</span>
+                  <span className="text-[9px] uppercase font-bold text-slate-500 block">Primary Findings</span>
+                  <span className="text-sm font-bold font-mono mt-1 block">{invoiceEvidence.primary_findings.length}</span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 text-center">
-                  <span className="text-[9px] uppercase font-bold text-slate-500 block">Avg Amount</span>
-                  <span className="text-sm font-bold font-mono mt-1 block">${Math.round(trustProfile.avg_amount).toLocaleString()}</span>
+                  <span className="text-[9px] uppercase font-bold text-slate-500 block">Risk Level</span>
+                  <span className="text-sm font-bold font-mono mt-1 block">{invoiceEvidence.risk_level}</span>
                 </div>
               </div>
 
-              {/* Status Breakdown */}
-              <div className="p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800/50 space-y-2">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400">Approved Payments:</span>
-                  <span className="font-bold text-emerald-400 font-mono">{trustProfile.approved_count}</span>
-                </div>
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400">Escalated Audits:</span>
-                  <span className="font-bold text-amber-400 font-mono">{trustProfile.escalated_count}</span>
-                </div>
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-400">Blocked Fraud:</span>
-                  <span className="font-bold text-rose-400 font-mono">{trustProfile.rejected_count}</span>
-                </div>
+              <div className="space-y-3">
+                <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500 block">Invoice Evidence</span>
+                {invoiceEvidence.primary_findings.length > 0 ? (
+                  <div className="space-y-2">
+                    {invoiceEvidence.primary_findings.map((finding, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
+                        {finding}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-slate-500">No explicit findings available for this transaction.</p>
+                )}
               </div>
 
-              {/* Bank Accounts Profile */}
-              <div>
-                <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500 block mb-2">Known Destination Accounts</span>
-                <div className="space-y-1.5">
-                  {trustProfile.known_bank_accounts.map((acct, i) => (
-                    <div key={i} className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800/80 font-mono font-bold text-slate-300">
-                      {acct}
+              {invoiceEvidence.document_forensics && (
+                <div className="p-3.5 rounded-2xl bg-slate-900/75 border border-slate-800 text-xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                    <span className="font-extrabold uppercase tracking-[0.18em] text-[10px] text-slate-400">Document Forensics</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                      invoiceEvidence.document_forensics.forensic_status === 'HIGH_RISK'
+                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                        : invoiceEvidence.document_forensics.forensic_status === 'REVIEW'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        : 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20'
+                    }`}>
+                      {invoiceEvidence.document_forensics.forensic_status?.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 font-mono text-[11px] text-slate-350 bg-slate-950/45 p-2 rounded-xl border border-slate-800/40">
+                    <span className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Field Verification</span>
+                    <div className="flex justify-between"><span>Vendor:</span><span className={invoiceEvidence.document_forensics.comparison_vendor === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{invoiceEvidence.document_forensics.comparison_vendor === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}</span></div>
+                    <div className="flex justify-between"><span>Bank Account:</span><span className={invoiceEvidence.document_forensics.comparison_bank === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{invoiceEvidence.document_forensics.comparison_bank === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}</span></div>
+                    <div className="flex justify-between"><span>Total Amount:</span><span className={invoiceEvidence.document_forensics.comparison_amount === 'MATCH' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{invoiceEvidence.document_forensics.comparison_amount === 'MATCH' ? '✓ MATCH' : '✕ MISMATCH'}</span></div>
+                  </div>
+
+                  {invoiceEvidence.document_forensics.forensic_signals?.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500 block">Tampering Signals</span>
+                      <div className="flex flex-wrap gap-1">
+                        {invoiceEvidence.document_forensics.forensic_signals.map((sig, i) => (
+                          <span key={i} className="px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-300 font-mono text-[9px]">
+                            {sig}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                  {trustProfile.known_bank_accounts.length === 0 && (
-                    <p className="text-[10px] text-slate-600 italic">No bank account records found.</p>
                   )}
-                </div>
-              </div>
 
+                  <div className="p-2.5 rounded-xl bg-cyan-950/20 border border-cyan-500/10 text-cyan-200 text-[11px] leading-relaxed">
+                    <span className="text-[9px] uppercase font-bold tracking-widest text-cyan-400 block mb-0.5">auditor action</span>
+                    {invoiceEvidence.document_forensics.recommended_action}
+                  </div>
+                </div>
+              )}
+
+              {invoiceEvidence.payment_evidence && (
+                <div className="p-3 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase tracking-[0.18em] font-semibold">
+                    <span>Payment Ledger Evidence</span>
+                    <span className={`px-2 py-0.5 rounded-full ${invoiceEvidence.payment_evidence.verified ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'}`}>
+                      {invoiceEvidence.payment_evidence.ledger_match_found ? (invoiceEvidence.payment_evidence.verified ? 'VERIFIED' : 'MISMATCHED') : 'NOT FOUND'}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 text-[11px] text-slate-300">
+                    <div className="flex justify-between"><span>Order Ref</span><span>{invoiceEvidence.payment_evidence.order_reference || 'n/a'}</span></div>
+                    <div className="flex justify-between"><span>Transaction Ref</span><span>{invoiceEvidence.payment_evidence.transaction_reference || 'n/a'}</span></div>
+                    <div className="flex justify-between"><span>Ledger Status</span><span>{invoiceEvidence.payment_evidence.ledger_status}</span></div>
+                    <div className="flex justify-between"><span>Ledger Amount</span><span>${invoiceEvidence.payment_evidence.ledger_amount?.toFixed(2) || '0.00'}</span></div>
+                    {invoiceEvidence.payment_evidence.beneficiary_name && (
+                      <div className="flex justify-between"><span>Beneficiary</span><span>{invoiceEvidence.payment_evidence.beneficiary_name}</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {invoiceEvidence.vendor_behavior && (
+                <div className="p-3 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs">
+                  <span className="text-[9px] uppercase font-bold tracking-widest text-slate-500 block mb-2">Vendor Behavior Profile</span>
+                  <div className="grid gap-2 text-slate-300 text-[11px]">
+                    <div className="flex justify-between"><span>Invoice Count</span><span>{invoiceEvidence.vendor_behavior.invoice_count}</span></div>
+                    <div className="flex justify-between"><span>Median Amount</span><span>${invoiceEvidence.vendor_behavior.median_amount?.toFixed(2) || '0.00'}</span></div>
+                    <div className="flex justify-between"><span>Avg Amount</span><span>${invoiceEvidence.vendor_behavior.avg_amount?.toFixed(2) || '0.00'}</span></div>
+                    <div className="flex justify-between"><span>Known Bank Accounts</span><span>{invoiceEvidence.vendor_behavior.known_bank_accounts?.length || 0}</span></div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="animate-pulse space-y-3 py-4">
