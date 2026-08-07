@@ -4,7 +4,9 @@ import { FileText, ShoppingBag, ShieldCheck } from 'lucide-react';
 export const WORKFLOW_CONFIG = {
   invoice_fraud: {
     key: 'invoice_fraud',
-    label: 'MONEY OUT PROTECTION (Supplier Fraud)',
+    label: 'MONEY OUT PROTECTION',
+    subtitle: 'Prevent fraudulent supplier payments',
+    typeLabel: 'Supplier Fraud',
     shortLabel: 'Money Out',
     icon: FileText,
     badge: 'Core Demo',
@@ -18,7 +20,9 @@ export const WORKFLOW_CONFIG = {
   },
   customer_order: {
     key: 'customer_order',
-    label: 'GOODS OUT PROTECTION (Customer Fraud)',
+    label: 'GOODS OUT PROTECTION',
+    subtitle: 'Prevent product release against fraudulent payments',
+    typeLabel: 'Customer Fraud',
     shortLabel: 'Goods Out',
     icon: ShoppingBag,
     badge: 'New Feature',
@@ -50,18 +54,21 @@ export default function WorkflowSelector({ activeWorkflow, onChange }) {
                   : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:text-slate-300'
               }`}
             >
-              <div className={`p-1.5 rounded-lg ${isActive ? 'bg-black/20' : 'bg-slate-800'}`}>
+              <div className={`p-2 rounded-xl ${isActive ? 'bg-black/30' : 'bg-slate-800'}`}>
                 <Icon className="w-5 h-5" />
               </div>
               <div className="text-left hidden sm:block">
-                <div className="text-sm font-bold truncate leading-tight">
-                  {config.label}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black tracking-wide leading-tight">
+                    {config.label}
+                  </span>
+                  <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded bg-slate-900/60 border border-slate-700/60 text-slate-300">
+                    {config.typeLabel}
+                  </span>
                 </div>
-                {isActive && (
-                  <div className="text-[10px] uppercase font-bold tracking-wider opacity-80 mt-0.5">
-                    {config.badge}
-                  </div>
-                )}
+                <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                  "{config.subtitle}"
+                </div>
               </div>
             </button>
           );

@@ -222,45 +222,60 @@ export default function PresetSelector({ activeWorkflow = 'invoice_fraud', onSel
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${presets.length} gap-4`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {presets.map((preset) => {
           const IconComponent = preset.icon;
+          const isHeroScenario = preset.id === 'procurement_overbilling' || preset.id === 'payment_tampering';
           return (
             <button
               key={preset.id}
               disabled={isLoading}
               onClick={() => onSelectPreset(preset.id)}
-              className={`p-4 rounded-2xl border text-left transition-all duration-200 glass-card group hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex flex-col justify-between ${preset.color}`}
+              className={`p-4 rounded-2xl border text-left transition-all duration-200 glass-card group hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed flex flex-col justify-between ${preset.color} ${isHeroScenario ? 'ring-2 ring-cyan-500/20' : ''}`}
             >
               <div>
                 <div className="flex items-start justify-between mb-3">
                   <div className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 shadow-md">
                     <IconComponent className="w-4 h-4" />
                   </div>
-                  <span className={`text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${preset.badgeColor}`}>
-                    {preset.badge}
-                  </span>
+                  <div className="flex flex-col items-end gap-1.5">
+                    {isHeroScenario && (
+                      <span 
+                        className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border animate-pulse"
+                        style={{
+                          color: 'var(--accent-hero)',
+                          backgroundColor: 'var(--accent-hero-bg)',
+                          borderColor: 'var(--accent-hero-border)',
+                        }}
+                      >
+                        ★ HERO DEMO
+                      </span>
+                    )}
+                    <span className={`text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full border ${preset.badgeColor}`}>
+                      {preset.badge}
+                    </span>
+                  </div>
                 </div>
-                <h3 className="text-sm font-bold text-slate-100 group-hover:text-white transition-colors">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-105 group-hover:text-white transition-colors">
                   {preset.title}
                 </h3>
-                <p className="text-[11px] text-slate-400 mt-2 line-clamp-3 leading-relaxed min-h-[48px]">
+                <p className="text-[12px] text-slate-400 mt-2 line-clamp-3 leading-relaxed min-h-[54px]">
                   {preset.description}
                 </p>
-                <div className="mt-3 p-2 rounded-lg bg-slate-900/60 border border-slate-800/50">
-                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Expected Signals</span>
-                  <span className="text-[10px] text-rose-300 font-mono line-clamp-2 leading-tight">{preset.signals}</span>
+                <div className="mt-3 p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/50">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Expected Signals</span>
+                  <span className="text-[11px] text-rose-300 font-mono line-clamp-2 leading-tight">{preset.signals}</span>
                 </div>
               </div>
 
               <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
                 <div>
-                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Value At Risk</span>
-                  <span className="font-mono text-slate-200 font-bold text-sm">{preset.amount}</span>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Value At Risk</span>
+                  <span className="font-mono text-slate-200 font-black text-base">{preset.amount}</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block">Expected</span>
-                  <span className={`text-xs font-black tracking-wider uppercase ${preset.expected === 'APPROVE' || preset.expected === 'RELEASE' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block">Expected</span>
+                  <span className={`text-sm font-black tracking-wider uppercase ${preset.expected === 'APPROVE' || preset.expected === 'RELEASE' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {preset.expected}
                   </span>
                 </div>

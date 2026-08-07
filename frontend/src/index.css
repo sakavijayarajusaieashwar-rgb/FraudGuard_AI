@@ -2,28 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-primary: #090d16;
+  --bg-image: radial-gradient(at 10% 10%, rgba(15, 23, 42, 0.8) 0px, transparent 50%),
+              radial-gradient(at 90% 10%, rgba(30, 27, 75, 0.4) 0px, transparent 50%),
+              radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+
+  --slate-950: #030712;
+  --slate-900: #0f172a;
+  --slate-850: #182235;
+  --slate-800: #1e293b;
+  --slate-750: #253248;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;
+
+  --glass-panel-bg: rgba(15, 23, 42, 0.7);
+  --glass-panel-border: rgba(255, 255, 255, 0.08);
+  --glass-card-bg: rgba(30, 41, 59, 0.5);
+  --glass-card-border: rgba(255, 255, 255, 0.06);
+
+  --accent-hero: #00f2fe;
+  --accent-hero-bg: rgba(0, 242, 254, 0.15);
+  --accent-hero-border: rgba(0, 242, 254, 0.35);
+}
+
+.light {
+  --bg-primary: #f8fafc;
+  --bg-image: radial-gradient(at 10% 10%, rgba(226, 232, 240, 0.8) 0px, transparent 50%),
+              radial-gradient(at 90% 10%, rgba(203, 213, 225, 0.4) 0px, transparent 50%),
+              radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.03) 0px, transparent 50%);
+
+  --slate-950: #ffffff;
+  --slate-900: #f1f5f9;
+  --slate-850: #e2e8f0;
+  --slate-800: #cbd5e1;
+  --slate-750: #94a3b8;
+  --slate-700: #64748b;
+  --slate-600: #475569;
+  --slate-500: #334155;
+  --slate-400: #1e293b;
+  --slate-300: #0f172a;
+  --slate-200: #090d16;
+  --slate-100: #020617;
+  --slate-50: #000000;
+
+  --glass-panel-bg: rgba(255, 255, 255, 0.85);
+  --glass-panel-border: rgba(148, 163, 184, 0.25);
+  --glass-card-bg: rgba(241, 245, 250, 0.7);
+  --glass-card-border: rgba(148, 163, 184, 0.2);
+
+  --accent-hero: #0369a1;
+  --accent-hero-bg: rgba(3, 105, 161, 0.1);
+  --accent-hero-border: rgba(3, 105, 161, 0.25);
+}
+
 @layer base {
   body {
-    background-color: #090d16;
-    background-image: 
-      radial-gradient(at 10% 10%, rgba(15, 23, 42, 0.8) 0px, transparent 50%),
-      radial-gradient(at 90% 10%, rgba(30, 27, 75, 0.4) 0px, transparent 50%),
-      radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+    background-color: var(--bg-primary);
+    background-image: var(--bg-image);
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   }
 }
 
 /* Custom Glassmorphism Cards */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--glass-panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-panel-border);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.5);
+  background: var(--glass-card-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-card-border);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

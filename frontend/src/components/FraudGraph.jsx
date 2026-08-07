@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Network, ShieldAlert, Award, FileText, ShoppingBag, ShieldCheck, HelpCircle } from 'lucide-react';
 
-export default function FraudGraph({ authToken }) {
+export default function FraudGraph({ authToken, onSwitchTab }) {
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [selectedNode, setSelectedNode] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -95,6 +95,28 @@ export default function FraudGraph({ authToken }) {
     if (type === 'BANK_ACCOUNT') return ShieldCheck;
     return Network;
   };
+
+  if (!isLoading && graphData.nodes.length === 0) {
+    return (
+      <div className="glass-panel p-8 rounded-3xl border border-slate-800 text-center flex flex-col items-center justify-center min-h-[420px]">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 mb-4">
+          <Network className="w-10 h-10 text-cyan-400 animate-pulse" />
+        </div>
+        <h3 className="text-base font-extrabold text-slate-100 uppercase tracking-wider">No fraud relationship selected</h3>
+        <p className="text-xs text-slate-400 max-w-md mt-2 leading-relaxed">
+          Launch or analyze a transaction to reveal connected vendors, customers, bank accounts and historical fraud relationships.
+        </p>
+        {onSwitchTab && (
+          <button
+            onClick={() => onSwitchTab('simulator')}
+            className="mt-5 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-cyan-500/20"
+          >
+            Go to Simulator
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

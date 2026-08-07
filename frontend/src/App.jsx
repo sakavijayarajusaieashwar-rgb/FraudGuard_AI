@@ -26,6 +26,22 @@ export default function App() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [metrics, setMetrics] = useState(null);
   const [activeTab, setActiveTab] = useState('simulator');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('fraudguard_theme');
+    if (saved) return saved;
+    // Default is dark mode per instructions
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    return prefersLight ? 'light' : 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+    localStorage.setItem('fraudguard_theme', theme);
+  }, [theme]);
 
   const filteredInvoices = invoices.filter(
     (inv) => inv.workflow_type === activeWorkflow || (!inv.workflow_type && activeWorkflow === 'invoice_fraud')
@@ -342,7 +358,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-dark-900 text-slate-100">
-      <Navbar backendConnected={backendConnected} onResetDB={handleResetDemo} userEmail={userEmail} onLogout={handleLogout} />
+      <Navbar
+        backendConnected={backendConnected}
+        onResetDB={handleResetDemo}
+        userEmail={userEmail}
+        onLogout={handleLogout}
+        theme={theme}
+        setTheme={setTheme}
+      />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
         
@@ -354,6 +377,40 @@ export default function App() {
 
         {/* 3 Preset Demos Panel */}
         <PresetSelector activeWorkflow={activeWorkflow} onSelectPreset={handleSelectPreset} isLoading={isAnalyzing} />
+
+        {/* Demo Flow Journey */}
+        <div className="glass-panel p-3.5 rounded-2xl border border-slate-800/80 bg-slate-950/40 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+              DEMO FLOW
+            </span>
+            <span className="text-[11px] text-slate-450 font-bold hidden sm:inline">
+              Coordinated Security Sequence:
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-2 sm:gap-4 text-[11px] font-bold text-slate-350">
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-200">1</span>
+              <span>Launch Attack</span>
+            </div>
+            <span className="text-slate-655 font-bold">→</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-200">2</span>
+              <span>Review Evidence</span>
+            </div>
+            <span className="text-slate-655 font-bold">→</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-200">3</span>
+              <span>Trace Network</span>
+            </div>
+            <span className="text-slate-655 font-bold">→</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-200">4</span>
+              <span>Ask Investigator</span>
+            </div>
+          </div>
+        </div>
 
         {/* Tab Selection */}
         <div className="flex gap-2 border-b border-slate-800 pb-px">
@@ -393,9 +450,9 @@ export default function App() {
         </div>
 
         {activeTab === 'graph' ? (
-          <FraudGraph authToken={authToken} />
+          <FraudGraph authToken={authToken} onSwitchTab={setActiveTab} />
         ) : activeTab === 'investigate' ? (
-          <InvestigatorPanel invoice={selectedInvoice} authToken={authToken} />
+          <InvestigatorPanel invoice={selectedInvoice} authToken={authToken} onSwitchTab={setActiveTab} />
         ) : (
           /* Main Content Grid */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

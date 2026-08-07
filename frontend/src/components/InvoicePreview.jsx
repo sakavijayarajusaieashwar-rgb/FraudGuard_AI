@@ -7,10 +7,10 @@ export default function InvoicePreview({ invoice, onRunAnalysis, isAnalyzing }) 
   if (!invoice) {
     return (
       <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center flex flex-col items-center justify-center min-h-[300px]">
-        <FileText className="w-12 h-12 text-slate-600 mb-3 animate-pulse" />
-        <h3 className="text-base font-semibold text-slate-300">No Invoice Selected</h3>
-        <p className="text-xs text-slate-500 max-w-xs mt-1">
-          Select a preset scenario above or upload a new invoice file to load data and run analysis.
+        <FileText className="w-12 h-12 text-cyan-400 mb-3 animate-pulse" />
+        <h3 className="text-base font-extrabold text-slate-100 uppercase tracking-wider">No Transaction Selected</h3>
+        <p className="text-xs text-slate-400 max-w-sm mt-2 leading-relaxed">
+          Launch one of the scenarios above to watch FraudGuard analyze the transaction in real time.
         </p>
       </div>
     );

@@ -1,7 +1,7 @@
 import React from 'react';
-import { ShieldCheck, Cpu, RefreshCw, Layers } from 'lucide-react';
+import { ShieldCheck, Cpu, RefreshCw, Layers, Sun, Moon } from 'lucide-react';
 
-export default function Navbar({ backendConnected, onResetDB, userEmail, onLogout }) {
+export default function Navbar({ backendConnected, onResetDB, userEmail, onLogout, theme, setTheme }) {
   return (
     <header className="sticky top-0 z-50 glass-panel border-b border-slate-800/80 px-6 py-4">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -40,6 +40,13 @@ export default function Navbar({ backendConnected, onResetDB, userEmail, onLogou
           )}
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="flex items-center justify-center p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-slate-650 text-slate-300 hover:text-white transition-all"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400 animate-spin-slow" /> : <Moon className="w-4 h-4 text-cyan-400" />}
+            </button>
             <button
               onClick={onResetDB}
               className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-slate-600 rounded-lg transition-all"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Send, ShieldAlert, Award, FileText, CheckCircle, HelpCircle, Network, Users } from 'lucide-react';
 
-export default function InvestigatorPanel({ invoice, authToken }) {
+export default function InvestigatorPanel({ invoice, authToken, onSwitchTab }) {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,10 +83,22 @@ export default function InvestigatorPanel({ invoice, authToken }) {
 
   if (!invoice) {
     return (
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 text-center flex flex-col items-center justify-center min-h-[400px] text-slate-500">
-        <HelpCircle className="w-12 h-12 text-slate-700 mb-2" />
-        <p className="text-sm font-bold">No Transaction Selected</p>
-        <p className="text-xs text-slate-600 mt-1">Select an invoice or order from the sidebar to launch investigation workbench.</p>
+      <div className="glass-panel p-8 rounded-3xl border border-slate-800 text-center flex flex-col items-center justify-center min-h-[420px]">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 mb-4">
+          <HelpCircle className="w-10 h-10 text-cyan-400 animate-pulse" />
+        </div>
+        <h3 className="text-base font-extrabold text-slate-100 uppercase tracking-wider">No transaction selected</h3>
+        <p className="text-xs text-slate-400 max-w-md mt-2 leading-relaxed">
+          Analyze a transaction first, then ask FraudGuard questions about risk, payments, procurement discrepancies, bank changes and connected entities.
+        </p>
+        {onSwitchTab && (
+          <button
+            onClick={() => onSwitchTab('simulator')}
+            className="mt-5 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-cyan-500/20"
+          >
+            Go to Simulator
+          </button>
+        )}
       </div>
     );
   }

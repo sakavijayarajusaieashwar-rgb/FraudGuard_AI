@@ -8,10 +8,25 @@ export default {
     extend: {
       colors: {
         dark: {
-          900: "#090d16",
-          800: "#0f172a",
-          700: "#1e293b",
-          600: "#334155",
+          900: "var(--bg-primary)",
+          800: "var(--slate-900)",
+          700: "var(--slate-800)",
+          600: "var(--slate-700)",
+        },
+        slate: {
+          950: "var(--slate-950)",
+          900: "var(--slate-900)",
+          850: "var(--slate-850)",
+          800: "var(--slate-800)",
+          750: "var(--slate-750)",
+          700: "var(--slate-700)",
+          600: "var(--slate-600)",
+          500: "var(--slate-500)",
+          400: "var(--slate-400)",
+          300: "var(--slate-300)",
+          200: "var(--slate-200)",
+          100: "var(--slate-100)",
+          50: "var(--slate-50)",
         },
         guard: {
           cyan: "#00f2fe",

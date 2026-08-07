@@ -78,6 +78,32 @@ export default function DecisionPanel({ invoice }) {
     }
   }
 
+  const forensics = invoice.extra_data?.document_forensics;
+  const threeWayMatch = forensics?.three_way_match;
+  
+  let overbillingDetails = null;
+  if (threeWayMatch && threeWayMatch.status !== 'MATCH' && threeWayMatch.items) {
+    const mismatchItem = threeWayMatch.items.find(item => item.status === 'MISMATCH' || item.unsupported_qty > 0);
+    if (mismatchItem) {
+      overbillingDetails = {
+        received: mismatchItem.received_qty,
+        claimed: mismatchItem.invoiced_qty,
+        unsupported: mismatchItem.unsupported_qty,
+        itemDesc: mismatchItem.description
+      };
+    }
+  }
+
+  let bankTamperingDetails = null;
+  const hasBankMismatch = forensics?.comparison_bank === 'MISMATCH' || invoice.risk_signals?.some(s => s.rule?.includes('BANK_ACCOUNT_MISMATCH'));
+  if (hasBankMismatch) {
+    bankTamperingDetails = {
+      claimed: forensics?.claimed_bank || 'N/A',
+      verified: forensics?.verified_bank || 'N/A',
+      isLinked: invoice.risk_signals?.some(s => s.rule?.includes('PREVIOUS_RISK') || s.description?.toLowerCase().includes('previously rejected') || s.description?.toLowerCase().includes('linked'))
+    };
+  }
+
   return (
     <div className={`p-6 rounded-2xl border bg-gradient-to-br ${theme.bg} ${theme.border} glass-panel flex flex-col gap-4 shadow-xl`}>
       
@@ -135,6 +161,68 @@ export default function DecisionPanel({ invoice }) {
         </div>
       </div>
 
+      {/* High-Impact Hackathon Attack Result Summary */}
+      {isBlocked && (overbillingDetails || bankTamperingDetails) && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 space-y-3">
+          <div className="flex items-center justify-between border-b border-rose-500/20 pb-2">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-rose-450">
+              ★ ATTACK PREVENTED
+            </span>
+            <span className="text-[10px] font-bold font-mono bg-rose-500/20 text-rose-350 px-2 py-0.5 rounded border border-rose-500/30">
+              SECURITY BLOCK ACTIVE
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-rose-400/80">Potential Fraud Loss Prevented</span>
+            <span className="text-3xl font-black font-mono text-rose-400">
+              ${exposurePrevented ? exposurePrevented.toLocaleString(undefined, {minimumFractionDigits: 2}) : invoice.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </span>
+          </div>
+
+          {overbillingDetails && (
+            <div className="pt-2 border-t border-rose-500/15 text-xs space-y-1 bg-rose-950/20 p-2.5 rounded-lg border border-rose-500/10">
+              <div className="text-rose-300 font-bold uppercase text-[10px] tracking-wider mb-1">
+                Discrepancy Details (Goods Receipt Mismatch)
+              </div>
+              <div className="flex justify-between font-mono mt-1.5">
+                <span className="text-rose-400/85">Goods Received:</span>
+                <span className="font-semibold text-slate-100">{overbillingDetails.received} units</span>
+              </div>
+              <div className="flex justify-between font-mono">
+                <span className="text-rose-400/85">Invoice Claimed:</span>
+                <span className="font-semibold text-slate-100">{overbillingDetails.claimed} units</span>
+              </div>
+              <div className="flex justify-between font-mono text-rose-350 font-bold border-t border-rose-500/10 pt-1.5 mt-1.5">
+                <span>Unsupported Quantity:</span>
+                <span>{overbillingDetails.unsupported} units</span>
+              </div>
+            </div>
+          )}
+
+          {bankTamperingDetails && (
+            <div className="pt-2 border-t border-rose-500/15 text-xs space-y-1 bg-rose-950/20 p-2.5 rounded-lg border border-rose-500/10">
+              <div className="text-rose-300 font-bold uppercase text-[10px] tracking-wider mb-1">
+                Bank Account Mismatch Detected
+              </div>
+              <div className="flex justify-between font-mono mt-1.5">
+                <span className="text-rose-400/85">Invoice Account:</span>
+                <span className="font-bold text-rose-300">{bankTamperingDetails.claimed}</span>
+              </div>
+              <div className="flex justify-between font-mono">
+                <span className="text-rose-400/85">Verified Account:</span>
+                <span className="font-bold text-emerald-400">{bankTamperingDetails.verified}</span>
+              </div>
+              {bankTamperingDetails.isLinked && (
+                <div className="mt-2 text-[10px] font-black uppercase text-rose-400 border border-rose-500/20 bg-rose-500/5 px-2 py-1 rounded text-center">
+                  ⚠️ Linked to Previously Rejected Entity
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Business Impact / Value Protected */}
       {isBlocked && exposurePrevented !== null && (
         <div className="mt-2 p-4 rounded-xl bg-slate-950/80 border border-slate-800 shadow-inner">
@@ -174,10 +262,10 @@ export default function DecisionPanel({ invoice }) {
       {/* Rationale Summary */}
       {invoice.verdict_summary && (
         <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs">
-          <span className="text-slate-400 font-semibold uppercase text-[10px] block mb-1">
+          <span className="text-slate-400 font-bold uppercase text-[11px] block mb-1">
             Decision Agent Rationale
           </span>
-          <p className="text-slate-200 leading-relaxed font-medium">
+          <p className="text-slate-100 leading-relaxed font-semibold text-sm">
             {invoice.verdict_summary}
           </p>
         </div>
@@ -187,28 +275,28 @@ export default function DecisionPanel({ invoice }) {
       {invoice.risk_signals && invoice.risk_signals.length > 0 && (
         <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-slate-400 font-semibold uppercase text-[10px]">
+            <span className="text-slate-400 font-bold uppercase text-[11px]">
               Risk Agent Findings
             </span>
-            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500 font-bold">
               {invoice.risk_signals.length} issue{invoice.risk_signals.length === 1 ? '' : 's'}
             </span>
           </div>
           <div className="space-y-2">
             {invoice.risk_signals.map((signal, index) => (
               <div key={`${signal.rule}-${index}`} className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/90">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] font-semibold text-slate-500">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-[0.18em] font-extrabold text-slate-400">
                   <span>{signal.rule.replace(/_/g, ' ')}</span>
-                  <span className={`px-2 py-0.5 rounded-full ${
-                    signal.severity === 'CRITICAL' ? 'bg-rose-500/15 text-rose-300' :
-                    signal.severity === 'HIGH' ? 'bg-orange-500/15 text-orange-300' :
-                    signal.severity === 'MEDIUM' ? 'bg-amber-500/15 text-amber-300' :
-                    'bg-slate-700/80 text-slate-300'
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    signal.severity === 'CRITICAL' ? 'bg-rose-500/15 text-rose-350' :
+                    signal.severity === 'HIGH' ? 'bg-orange-500/15 text-orange-355' :
+                    signal.severity === 'MEDIUM' ? 'bg-amber-500/15 text-amber-355' :
+                    'bg-slate-700/80 text-slate-200'
                   }`}>
                     {signal.severity}
                   </span>
                 </div>
-                <p className="mt-2 text-slate-200 text-[12px] leading-relaxed">
+                <p className="mt-2 text-slate-100 text-[13px] font-medium leading-relaxed">
                   {signal.description}
                 </p>
               </div>
@@ -222,10 +310,10 @@ export default function DecisionPanel({ invoice }) {
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-xs">
           <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
           <div>
-            <span className="text-cyan-400 font-bold text-[10px] uppercase block">
+            <span className="text-cyan-400 font-black text-[11px] uppercase block">
               Critic Agent Authorization Stamp
             </span>
-            <p className="text-cyan-200/90 text-[11px] mt-0.5">
+            <p className="text-cyan-200/90 text-[12px] font-medium mt-0.5">
               {invoice.critic_notes}
             </p>
           </div>
