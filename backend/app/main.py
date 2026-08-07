@@ -7,7 +7,8 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, Body, Request, status, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,7 @@ from .auth import (
     get_user_by_email,
     get_password_hash,
 )
-from .database import engine, Base, get_db, ensure_db_schema
+from .database import engine, Base, get_db, ensure_db_schema, SessionLocal
 from .models import Invoice, Vendor, User, PaymentLedger, PurchaseOrder, GoodsReceipt
 from .schemas import (
     InvoiceResponse,
@@ -47,6 +48,23 @@ from .workflows import get_workflow, list_workflows
 Base.metadata.create_all(bind=engine)
 ensure_db_schema()
 
+# Auto-seed if users table is empty
+db_session = SessionLocal()
+try:
+    if db_session.query(User).count() == 0:
+        print("Empty database detected. Auto-seeding default demo dataset...")
+        import sys
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from .seed import seed_database
+        from seed_payment_ledger import seed_ledger
+        seed_database()
+        seed_ledger()
+        print("Auto-seeding complete.")
+except Exception as e:
+    print(f"Auto-seeding error: {e}")
+finally:
+    db_session.close()
+
 app = FastAPI(
     title="FraudGuard AI - Autonomous Multi-Agent Invoice Fraud Detection API",
     description="Autonomous 4-agent invoice risk reasoning backend.",
@@ -61,9 +79,12 @@ async def internal_exception_handler(request: Request, exc: Exception):
     )
 
 # CORS Middleware enabling Vite frontend connection
+allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+origins = [o.strip() for o in allowed_origins_str.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1144,6 +1165,10 @@ def get_dashboard_metrics(db: Session = Depends(get_db), current_user: User = De
 
 @app.post("/api/demo/reset")
 def reset_demo(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    enable_reset = os.getenv("ENABLE_DEMO_RESET", "true").strip().lower() == "true"
+    if not enable_reset:
+        raise HTTPException(status_code=403, detail="Demo reset is disabled in this environment.")
+        
     from app.seed import seed_database
     from seed_payment_ledger import seed_ledger
     seed_database()
@@ -1564,3 +1589,23 @@ def override_invoice_decision(invoice_id: int, req: OverrideRequest, db: Session
         "new_status": invoice.status,
         "human_override": invoice.human_override
     }
+
+
+@app.get("/health")
+def health_check_root():
+    return health_check()
+
+
+# SPA serving
+current_dir = os.path.dirname(os.path.abspath(__file__))
+frontend_dist_path = os.path.abspath(os.path.join(current_dir, "..", "..", "frontend", "dist"))
+
+if os.path.exists(frontend_dist_path):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
+
+    @app.get("/{rest_of_path:path}")
+    async def serve_frontend(rest_of_path: str):
+        # Exclude API endpoints and documentation from catch-all
+        if rest_of_path.startswith("api") or rest_of_path.startswith("health") or rest_of_path.startswith("docs") or rest_of_path.startswith("openapi.json"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(os.path.join(frontend_dist_path, "index.html"))
