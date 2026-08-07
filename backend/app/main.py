@@ -541,7 +541,7 @@ async def investigate_invoice(
         else:
             if "20000" in str(inv.reasoning) or "20,000" in str(inv.reasoning):
                 amt_val = 20000.0
-        answer = f"The unsupported amount is ₹{int(amt_val):,} (or ${amt_val:,.2f})."
+        answer = f"The unsupported amount is ${amt_val:,.2f}."
         return InvestigationResponse(
             answer=answer,
             evidence=["PROCUREMENT_OVERBILLING_DISCREPANCY"],
@@ -1144,35 +1144,10 @@ def get_dashboard_metrics(db: Session = Depends(get_db), current_user: User = De
 
 @app.post("/api/demo/reset")
 def reset_demo(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    db.query(Invoice).filter(Invoice.owner_id == current_user.id).delete()
-    
-    # 1. Re-seed behavioral baseline for Established Vendor LLC
-    past_invoices = [
-        {"vendor_name": "Established Vendor LLC", "amount": 145000.00, "invoice_number": "INV-EST-001", "bank_account_number": "111222333", "status": "APPROVED"},
-        {"vendor_name": "Established Vendor LLC", "amount": 152000.00, "invoice_number": "INV-EST-002", "bank_account_number": "111222333", "status": "APPROVED"},
-        {"vendor_name": "Established Vendor LLC", "amount": 149500.00, "invoice_number": "INV-EST-003", "bank_account_number": "111222333", "status": "APPROVED"},
-        # 2. Seed a previously REJECTED invoice from Vendor C using 9948201
-        {"vendor_name": "Vendor C", "amount": 25000.00, "invoice_number": "INV-REJ-888", "bank_account_number": "9948201", "status": "REJECT"},
-        # 3. Seed an established invoice for Vendor A using 3322110
-        {"vendor_name": "Vendor A", "amount": 12000.00, "invoice_number": "INV-EST-A01", "bank_account_number": "3322110", "status": "APPROVED"}
-    ]
-    
-    for inv in past_invoices:
-        extra_data = {"bank_account_number": inv["bank_account_number"]}
-        db_inv = Invoice(
-            owner_id=current_user.id,
-            workflow_type="invoice_fraud",
-            invoice_number=inv["invoice_number"],
-            vendor_name=inv["vendor_name"],
-            amount=inv["amount"],
-            invoice_date="2026-07-15",
-            status=inv["status"],
-            reasoning="Historical baseline data" if inv["status"] == "APPROVED" else "Rejected due to validation failure",
-            extra_data_json=json.dumps(extra_data)
-        )
-        db.add(db_inv)
-        
-    db.commit()
+    from app.seed import seed_database
+    from seed_payment_ledger import seed_ledger
+    seed_database()
+    seed_ledger()
     return {"message": "Demo state reset successfully."}
 @app.get("/invoices", response_model=List[InvoiceResponse])
 @app.get("/api/invoices", response_model=List[InvoiceResponse])
